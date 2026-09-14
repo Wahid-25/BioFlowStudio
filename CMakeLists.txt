@@ -11,6 +11,10 @@ qt_standard_project_setup()
 
 qt_add_executable(BioFlowStudio
     src/main.cpp
+    src/phylogenetics/PairwiseAligner.cpp
+    src/phylogenetics/PairwiseAligner.h
+    src/phylogenetics/DistanceMatrix.cpp
+    src/phylogenetics/DistanceMatrix.h
     src/phylogenetics/Sequence.cpp
     src/phylogenetics/Sequence.h
     src/phylogenetics/FastaParser.cpp

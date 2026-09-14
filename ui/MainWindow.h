@@ -1,5 +1,7 @@
 #pragma once
-
+#include <memory>
+#include <vector>
+#include "phylogenetics/Sequence.h"
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
@@ -27,6 +29,7 @@ private:
 
     QStringList selectedFastaFiles;
     QString selectedExpressionFile;
+    std::vector<std::unique_ptr<Sequence>> loadedSequences;
 
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticPage();

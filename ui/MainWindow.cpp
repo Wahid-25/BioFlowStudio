@@ -8,6 +8,14 @@
 #include <QString>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QFileInfo>
+#include <QListWidget>
+#include <QMessageBox>
+
+#include <exception>
+#include <utility>
+
+#include "phylogenetics/FastaParser.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -284,37 +292,93 @@ QWidget* MainWindow::createGeneExpressionPage()
 }
 void MainWindow::importFastaFiles()
 {
-    QStringList files = QFileDialog::getOpenFileNames(
+    QStringList filePaths = QFileDialog::getOpenFileNames(
         this,
         "Select FASTA Files",
         QString(),
         "FASTA Files (*.fasta *.fa *.fna *.faa);;All Files (*.*)"
     );
 
-    if (files.isEmpty())
+    if (filePaths.isEmpty())
     {
         return;
     }
 
-    selectedFastaFiles = files;
+    FastaParser parser;
+
+    selectedFastaFiles = filePaths;
+    loadedSequences.clear();
     phylogeneticFileList->clear();
 
-    for (const QString& filePath : selectedFastaFiles)
+    try
     {
-        QFileInfo fileInformation(filePath);
+        for (const QString& filePath : selectedFastaFiles)
+        {
+            QFileInfo fileInformation(filePath);
 
-        QListWidgetItem* item = new QListWidgetItem(
-            fileInformation.fileName(),
-            phylogeneticFileList
+            phylogeneticFileList->addItem(
+                "FILE: " + fileInformation.fileName()
+            );
+
+            auto parsedSequences =
+                parser.parseFile(filePath.toStdString());
+
+            for (auto& sequence : parsedSequences)
+            {
+                QString sequenceInformation =
+                    QString("    %1 | %2 | Length: %3")
+                        .arg(
+                            QString::fromStdString(
+                                sequence->getIdentifier()
+                            )
+                        )
+                        .arg(
+                            QString::fromStdString(
+                                sequence->getTypeName()
+                            )
+                        )
+                        .arg(
+                            static_cast<qulonglong>(
+                                sequence->getLength()
+                            )
+                        );
+
+                phylogeneticFileList->addItem(
+                    sequenceInformation
+                );
+
+                loadedSequences.push_back(
+                    std::move(sequence)
+                );
+            }
+        }
+
+        phylogeneticFileList->insertItem(
+            0,
+            QString(
+                "Successfully loaded %1 biological sequence(s)"
+            ).arg(
+                static_cast<qulonglong>(
+                    loadedSequences.size()
+                )
+            )
+        );
+    }
+    catch (const std::exception& error)
+    {
+        loadedSequences.clear();
+
+        QMessageBox::critical(
+            this,
+            "FASTA Import Error",
+            QString::fromStdString(error.what())
         );
 
-        item->setToolTip(filePath);
+        phylogeneticFileList->clear();
+        phylogeneticFileList->addItem(
+            "FASTA import failed. Please check the selected file."
+        );
     }
-
-    statusLabel->setText(
-        QString::number(selectedFastaFiles.size()) +
-        " FASTA file(s) selected"
-    );
 }
 
 void MainWindow::importExpressionFile()
