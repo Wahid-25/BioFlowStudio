@@ -9,4 +9,5 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(BioFlowStudio
     src/main.cpp
     src/core/Project.cpp
+    src/core/Dataset.cpp
 )
