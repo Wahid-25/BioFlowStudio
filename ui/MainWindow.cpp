@@ -1,5 +1,7 @@
 #include "MainWindow.h"
-
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QListWidget>
 #include <QLabel>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -79,6 +81,19 @@ MainWindow::MainWindow(QWidget* parent)
         "    font-size: 16px;"
         "    font-weight: bold;"
         "}"
+                "QListWidget {"
+        "    background-color: white;"
+        "    border: 1px solid #B8C4CE;"
+        "    border-radius: 6px;"
+        "    padding: 8px;"
+        "}"
+        "#fileLabel {"
+        "    background-color: white;"
+        "    border: 1px solid #B8C4CE;"
+        "    border-radius: 6px;"
+        "    padding: 20px;"
+        "    color: #263645;"
+        "}"
     );
 }
 
@@ -153,23 +168,40 @@ QWidget* MainWindow::createPhylogeneticPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(80, 60, 80, 60);
-    layout->setSpacing(20);
+    layout->setContentsMargins(70, 45, 70, 45);
+    layout->setSpacing(18);
 
     QLabel* title = new QLabel("Phylogenetic Analysis");
     title->setObjectName("pageTitle");
     title->setAlignment(Qt::AlignCenter);
 
     QLabel* description = new QLabel(
-        "This workspace will contain FASTA import, sequence validation, "
-        "pairwise alignment, distance matrices, heatmaps and phylogenetic trees."
+        "Import multiple FASTA files containing DNA or protein sequences. "
+        "The files will later pass through validation, alignment, distance "
+        "calculation and phylogenetic tree construction."
     );
     description->setObjectName("descriptionLabel");
     description->setAlignment(Qt::AlignCenter);
     description->setWordWrap(true);
 
-    QPushButton* backButton = new QPushButton("Back to Dashboard");
+    QPushButton* importButton =
+        new QPushButton("Select FASTA Files");
+
+    phylogeneticFileList = new QListWidget;
+    phylogeneticFileList->setMinimumHeight(180);
+    phylogeneticFileList->addItem("No FASTA files selected");
+
+    QPushButton* backButton =
+        new QPushButton("Back to Dashboard");
+
     backButton->setObjectName("backButton");
+
+    connect(
+        importButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::importFastaFiles
+    );
 
     connect(
         backButton,
@@ -178,12 +210,13 @@ QWidget* MainWindow::createPhylogeneticPage()
         &MainWindow::returnToDashboard
     );
 
-    layout->addStretch();
     layout->addWidget(title);
     layout->addWidget(description);
-    layout->addSpacing(30);
-    layout->addWidget(backButton);
+    layout->addSpacing(10);
+    layout->addWidget(importButton);
+    layout->addWidget(phylogeneticFileList);
     layout->addStretch();
+    layout->addWidget(backButton);
 
     return page;
 }
@@ -193,24 +226,44 @@ QWidget* MainWindow::createGeneExpressionPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(80, 60, 80, 60);
-    layout->setSpacing(20);
+    layout->setContentsMargins(70, 45, 70, 45);
+    layout->setSpacing(18);
 
     QLabel* title = new QLabel("Gene Expression Analysis");
     title->setObjectName("pageTitle");
     title->setAlignment(Qt::AlignCenter);
 
     QLabel* description = new QLabel(
-        "This workspace will contain expression data import, normalization, "
-        "correlation, PCA, differential expression, volcano plots, heatmaps "
-        "and candidate biomarker ranking."
+        "Import a CSV or TSV gene-expression matrix. The dataset will later "
+        "pass through quality control, normalization, PCA, differential "
+        "expression analysis and candidate biomarker ranking."
     );
     description->setObjectName("descriptionLabel");
     description->setAlignment(Qt::AlignCenter);
     description->setWordWrap(true);
 
-    QPushButton* backButton = new QPushButton("Back to Dashboard");
+    QPushButton* importButton =
+        new QPushButton("Select Expression File");
+
+    expressionFileLabel =
+        new QLabel("No expression file selected");
+
+    expressionFileLabel->setObjectName("fileLabel");
+    expressionFileLabel->setAlignment(Qt::AlignCenter);
+    expressionFileLabel->setWordWrap(true);
+    expressionFileLabel->setMinimumHeight(100);
+
+    QPushButton* backButton =
+        new QPushButton("Back to Dashboard");
+
     backButton->setObjectName("backButton");
+
+    connect(
+        importButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::importExpressionFile
+    );
 
     connect(
         backButton,
@@ -219,14 +272,76 @@ QWidget* MainWindow::createGeneExpressionPage()
         &MainWindow::returnToDashboard
     );
 
-    layout->addStretch();
     layout->addWidget(title);
     layout->addWidget(description);
-    layout->addSpacing(30);
-    layout->addWidget(backButton);
+    layout->addSpacing(20);
+    layout->addWidget(importButton);
+    layout->addWidget(expressionFileLabel);
     layout->addStretch();
+    layout->addWidget(backButton);
 
     return page;
+}
+void MainWindow::importFastaFiles()
+{
+    QStringList files = QFileDialog::getOpenFileNames(
+        this,
+        "Select FASTA Files",
+        QString(),
+        "FASTA Files (*.fasta *.fa *.fna *.faa);;All Files (*.*)"
+    );
+
+    if (files.isEmpty())
+    {
+        return;
+    }
+
+    selectedFastaFiles = files;
+    phylogeneticFileList->clear();
+
+    for (const QString& filePath : selectedFastaFiles)
+    {
+        QFileInfo fileInformation(filePath);
+
+        QListWidgetItem* item = new QListWidgetItem(
+            fileInformation.fileName(),
+            phylogeneticFileList
+        );
+
+        item->setToolTip(filePath);
+    }
+
+    statusLabel->setText(
+        QString::number(selectedFastaFiles.size()) +
+        " FASTA file(s) selected"
+    );
+}
+
+void MainWindow::importExpressionFile()
+{
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Select Gene Expression File",
+        QString(),
+        "Expression Files (*.csv *.tsv);;All Files (*.*)"
+    );
+
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    selectedExpressionFile = filePath;
+
+    QFileInfo fileInformation(filePath);
+
+    expressionFileLabel->setText(
+        "Selected file: " + fileInformation.fileName()
+    );
+
+    expressionFileLabel->setToolTip(filePath);
+
+    statusLabel->setText("Expression file selected");
 }
 
 void MainWindow::selectPhylogeneticWorkspace()
