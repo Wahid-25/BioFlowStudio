@@ -15,8 +15,16 @@ qt_standard_project_setup()
 
 qt_add_executable(BioFlowStudio
     src/main.cpp
+
     src/core/Project.cpp
     src/core/Dataset.cpp
+
+    ui/MainWindow.cpp
+    ui/MainWindow.h
+)
+target_include_directories(BioFlowStudio PRIVATE
+    src
+    ui
 )
 
 target_link_libraries(BioFlowStudio PRIVATE
