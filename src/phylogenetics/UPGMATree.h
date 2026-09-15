@@ -7,7 +7,7 @@
 
 class UPGMATree
 {
-private:
+public:
     struct Node
     {
         std::string name;
@@ -19,6 +19,7 @@ private:
         bool isLeaf() const;
     };
 
+private:
     std::unique_ptr<Node> root;
 
     std::string serializeNode(
@@ -37,4 +38,9 @@ public:
     bool isEmpty() const;
     std::string toNewick() const;
     void clear();
+
+    const Node* getRoot() const
+    {
+        return root.get();
+    }
 };

@@ -17,11 +17,13 @@ class QLabel;
 class QListWidget;
 class QStackedWidget;
 class QWidget;
+class PhylogeneticTreeWidget;
 
 class MainWindow : public QMainWindow
 {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    
 
 private:
     Project currentProject;
@@ -30,6 +32,7 @@ private:
     QLabel* statusLabel;
     QTabWidget* analysisTabs = nullptr;
     QPlainTextEdit* treeOutput = nullptr;
+    PhylogeneticTreeWidget* treeGraphic = nullptr;
     QLabel* treeStatusLabel = nullptr;
 
     UPGMATree currentTree; 

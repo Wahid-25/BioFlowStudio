@@ -12,6 +12,8 @@ qt_standard_project_setup()
 qt_add_executable(BioFlowStudio
     src/main.cpp
     src/phylogenetics/UPGMATree.cpp
+    src/visualization/PhylogeneticTreeWidget.cpp
+    src/visualization/PhylogeneticTreeWidget.h
     src/phylogenetics/UPGMATree.h
     src/phylogenetics/PairwiseAligner.cpp
     src/phylogenetics/PairwiseAligner.h
