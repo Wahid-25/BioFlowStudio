@@ -1,62 +1,96 @@
 #pragma once
-#include <memory>
-#include <vector>
-#include "phylogenetics/Sequence.h"
+
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
-#include "phylogenetics/UPGMATree.h"
-#include "phylogenetics/DistanceMatrix.h"
+
+#include <memory>
+#include <vector>
 
 #include "core/Project.h"
-class QComboBox;
-class QPlainTextEdit;
-class QTabWidget;
-class QTableWidget;
+#include "phylogenetics/DistanceMatrix.h"
+#include "phylogenetics/Sequence.h"
+#include "phylogenetics/UPGMATree.h"
+
 class QLabel;
 class QListWidget;
+class QComboBox;
+class QPlainTextEdit;
+class QPushButton;
 class QStackedWidget;
+class QTableWidget;
 class QWidget;
+
+class PairwiseAligner;
 class PhylogeneticTreeWidget;
 
 class MainWindow : public QMainWindow
 {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
-    
 
 private:
+    static constexpr int DashboardPage = 0;
+    static constexpr int PhylogeneticSetupPage = 1;
+    static constexpr int DistanceMatrixPage = 2;
+    static constexpr int PhylogeneticTreePage = 3;
+    static constexpr int GeneExpressionPage = 4;
+
     Project currentProject;
+    QStackedWidget* pages = nullptr;
+    QLabel* statusLabel = nullptr;
 
-    QStackedWidget* pages;
-    QLabel* statusLabel;
-    QTabWidget* analysisTabs = nullptr;
-    QPlainTextEdit* treeOutput = nullptr;
-    PhylogeneticTreeWidget* treeGraphic = nullptr;
-    QLabel* treeStatusLabel = nullptr;
-
-    UPGMATree currentTree; 
     QListWidget* phylogeneticFileList = nullptr;
-    QLabel* expressionFileLabel = nullptr;
+    QPushButton* openMatrixButton = nullptr;
+    QPushButton* openTreeButton = nullptr;
 
     QStringList selectedFastaFiles;
-    QString selectedExpressionFile;
     std::vector<std::unique_ptr<Sequence>> loadedSequences;
 
-    QWidget* createDashboardPage();
-    QWidget* createPhylogeneticPage();
-    QWidget* createGeneExpressionPage();
-    QComboBox* alignmentMethodBox = nullptr;
+    QComboBox* matrixAlignmentMethodBox = nullptr;
     QTableWidget* distanceMatrixTable = nullptr;
     QLabel* matrixStatusLabel = nullptr;
-
     DistanceMatrix currentDistanceMatrix;
-    void generateDistanceMatrix();
+
+    QComboBox* treeAlignmentMethodBox = nullptr;
+    PhylogeneticTreeWidget* treeGraphic = nullptr;
+    QPlainTextEdit* treeOutput = nullptr;
+    QLabel* treeStatusLabel = nullptr;
+    DistanceMatrix treeDistanceMatrix;
+    UPGMATree currentTree;
+
+    QLabel* expressionFileLabel = nullptr;
+    QString selectedExpressionFile;
+
+    QWidget* createDashboardPage();
+    QWidget* createPhylogeneticSetupPage();
+    QWidget* createDistanceMatrixPage();
+    QWidget* createPhylogeneticTreePage();
+    QWidget* createGeneExpressionPage();
+
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
+
+    void openDistanceMatrixPage();
+    void openPhylogeneticTreePage();
+
     void returnToDashboard();
-    void generatePhylogeneticTree();
+    void returnToPhylogeneticSetup();
+
     void importFastaFiles();
     void importExpressionFile();
-    void exportPhylogeneticResults();
+
+    void generateDistanceMatrix();
+    void generatePhylogeneticTree();
+
+    void exportMatrixResults();
+    void exportTreeResults();
+
+    void populateDistanceMatrixTable(
+        const DistanceMatrix& matrix
+    );
+
+    std::unique_ptr<PairwiseAligner> createAligner(
+        const QString& methodName
+    ) const;
 };
