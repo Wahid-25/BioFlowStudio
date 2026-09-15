@@ -5,10 +5,13 @@
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
+#include "phylogenetics/UPGMATree.h"
 #include "phylogenetics/DistanceMatrix.h"
 
 #include "core/Project.h"
 class QComboBox;
+class QPlainTextEdit;
+class QTabWidget;
 class QTableWidget;
 class QLabel;
 class QListWidget;
@@ -25,7 +28,11 @@ private:
 
     QStackedWidget* pages;
     QLabel* statusLabel;
+    QTabWidget* analysisTabs = nullptr;
+    QPlainTextEdit* treeOutput = nullptr;
+    QLabel* treeStatusLabel = nullptr;
 
+    UPGMATree currentTree; 
     QListWidget* phylogeneticFileList = nullptr;
     QLabel* expressionFileLabel = nullptr;
 
@@ -45,7 +52,7 @@ private:
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
     void returnToDashboard();
-
+    void generatePhylogeneticTree();
     void importFastaFiles();
     void importExpressionFile();
 };

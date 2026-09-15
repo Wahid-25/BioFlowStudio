@@ -1,30 +1,29 @@
 #include "MainWindow.h"
-#include <QFileDialog>
-#include <QFileInfo>
-#include <QListWidget>
-#include <QLabel>
-#include <QPushButton>
-#include <QStackedWidget>
-#include <QString>
-#include <QVBoxLayout>
-#include <QWidget>
-#include <QFileInfo>
-#include <QListWidget>
-#include <QMessageBox>
+
 #include <QAbstractItemView>
 #include <QComboBox>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHeaderView>
+#include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QStackedWidget>
+#include <QStringList>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QVBoxLayout>
+#include <QWidget>
 
-#include <memory>
-
-#include "phylogenetics/PairwiseAligner.h"
 #include <exception>
+#include <memory>
 #include <utility>
 
 #include "phylogenetics/FastaParser.h"
+#include "phylogenetics/PairwiseAligner.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -33,48 +32,42 @@ MainWindow::MainWindow(QWidget* parent)
           "A workflow platform for biological data analysis",
           WorkspaceType::NotSelected
       ),
-      pages(new QStackedWidget(this)),
+      pages(new QStackedWidget),
       statusLabel(nullptr)
 {
     setWindowTitle("BioFlow Studio");
-    resize(1000, 650);
-    setMinimumSize(800, 550);
+    resize(1000, 680);
 
     pages->addWidget(createDashboardPage());
     pages->addWidget(createPhylogeneticPage());
     pages->addWidget(createGeneExpressionPage());
 
+    pages->setCurrentIndex(0);
     setCentralWidget(pages);
 
     setStyleSheet(
         "QWidget {"
         "    background-color: #F4F7FA;"
         "    font-family: Arial;"
-        "    font-size: 16px;"
-        "    color: #263645;"
+        "    font-size: 15px;"
         "}"
-        "QLabel {"
-        "    background-color: transparent;"
-        "    color: #263645;"
-        "}"
+
         "#titleLabel {"
         "    color: #163A5F;"
         "    font-size: 38px;"
         "    font-weight: bold;"
         "}"
-        "#pageTitle {"
-        "    color: #163A5F;"
-        "    font-size: 30px;"
-        "    font-weight: bold;"
-        "}"
+
         "#subtitleLabel {"
         "    color: #40566B;"
         "    font-size: 20px;"
         "}"
+
         "#descriptionLabel {"
-        "    color: #263645;"
+        "    color: #40566B;"
         "    font-size: 16px;"
         "}"
+
         "QPushButton {"
         "    background-color: #163A5F;"
         "    color: white;"
@@ -82,34 +75,78 @@ MainWindow::MainWindow(QWidget* parent)
         "    border-radius: 8px;"
         "    font-size: 17px;"
         "    font-weight: bold;"
-        "    padding: 14px;"
+        "    padding: 10px;"
         "}"
+
         "QPushButton:hover {"
-        "    background-color: #2A6797;"
+        "    background-color: #245C8A;"
         "}"
+
         "QPushButton:pressed {"
         "    background-color: #0F2B47;"
         "}"
-        "#backButton {"
-        "    background-color: #5D6D7E;"
+
+        "QListWidget {"
+        "    background-color: white;"
+        "    color: #203040;"
+        "    border: 1px solid #D7E0E8;"
+        "    border-radius: 5px;"
+        "    padding: 8px;"
         "}"
+
+        "QComboBox {"
+        "    background-color: white;"
+        "    color: #203040;"
+        "    border: 1px solid #BCC9D4;"
+        "    border-radius: 5px;"
+        "    padding: 7px;"
+        "}"
+
+        "QTableWidget {"
+        "    background-color: white;"
+        "    alternate-background-color: #EDF3F8;"
+        "    color: #203040;"
+        "    border: 1px solid #D7E0E8;"
+        "    gridline-color: #CBD5DF;"
+        "}"
+
+        "QHeaderView::section {"
+        "    background-color: #E3EBF2;"
+        "    color: #163A5F;"
+        "    font-weight: bold;"
+        "    padding: 6px;"
+        "    border: 1px solid #CBD5DF;"
+        "}"
+
+        "QTabWidget::pane {"
+        "    border: 1px solid #BCC9D4;"
+        "    background-color: white;"
+        "}"
+
+        "QTabBar::tab {"
+        "    background-color: #DCE6EF;"
+        "    color: #163A5F;"
+        "    padding: 9px 18px;"
+        "    font-weight: bold;"
+        "}"
+
+        "QTabBar::tab:selected {"
+        "    background-color: #163A5F;"
+        "    color: white;"
+        "}"
+
+        "QPlainTextEdit {"
+        "    background-color: white;"
+        "    color: #203040;"
+        "    border: 1px solid #D7E0E8;"
+        "    font-family: Consolas;"
+        "    font-size: 14px;"
+        "}"
+
         "#statusLabel {"
         "    color: #2D6A4F;"
         "    font-size: 16px;"
         "    font-weight: bold;"
-        "}"
-                "QListWidget {"
-        "    background-color: white;"
-        "    border: 1px solid #B8C4CE;"
-        "    border-radius: 6px;"
-        "    padding: 8px;"
-        "}"
-        "#fileLabel {"
-        "    background-color: white;"
-        "    border: 1px solid #B8C4CE;"
-        "    border-radius: 6px;"
-        "    padding: 20px;"
-        "    color: #263645;"
         "}"
     );
 }
@@ -122,22 +159,27 @@ QWidget* MainWindow::createDashboardPage()
     layout->setContentsMargins(80, 55, 80, 55);
     layout->setSpacing(20);
 
-    QLabel* title = new QLabel("BioFlow Studio");
-    title->setObjectName("titleLabel");
-    title->setAlignment(Qt::AlignCenter);
+    QLabel* titleLabel =
+        new QLabel("BioFlow Studio");
 
-    QLabel* subtitle = new QLabel(
+    titleLabel->setObjectName("titleLabel");
+    titleLabel->setAlignment(Qt::AlignCenter);
+
+    QLabel* subtitleLabel = new QLabel(
         "Object-Oriented Bioinformatics Workflow Platform"
     );
-    subtitle->setObjectName("subtitleLabel");
-    subtitle->setAlignment(Qt::AlignCenter);
 
-    QLabel* description = new QLabel(
-        "Choose one of the two bioinformatics workspaces to begin an analysis."
+    subtitleLabel->setObjectName("subtitleLabel");
+    subtitleLabel->setAlignment(Qt::AlignCenter);
+
+    QLabel* descriptionLabel = new QLabel(
+        "Choose one of the two bioinformatics "
+        "workspaces to begin an analysis."
     );
-    description->setObjectName("descriptionLabel");
-    description->setAlignment(Qt::AlignCenter);
-    description->setWordWrap(true);
+
+    descriptionLabel->setObjectName("descriptionLabel");
+    descriptionLabel->setAlignment(Qt::AlignCenter);
+    descriptionLabel->setWordWrap(true);
 
     QPushButton* phylogeneticButton =
         new QPushButton("Phylogenetic Analysis");
@@ -145,12 +187,22 @@ QWidget* MainWindow::createDashboardPage()
     QPushButton* expressionButton =
         new QPushButton("Gene Expression Analysis");
 
-    phylogeneticButton->setMinimumHeight(65);
-    expressionButton->setMinimumHeight(65);
+    phylogeneticButton->setMinimumHeight(60);
+    expressionButton->setMinimumHeight(60);
 
     statusLabel = new QLabel("No workspace selected");
     statusLabel->setObjectName("statusLabel");
     statusLabel->setAlignment(Qt::AlignCenter);
+
+    layout->addStretch();
+    layout->addWidget(titleLabel);
+    layout->addWidget(subtitleLabel);
+    layout->addWidget(descriptionLabel);
+    layout->addSpacing(18);
+    layout->addWidget(phylogeneticButton);
+    layout->addWidget(expressionButton);
+    layout->addWidget(statusLabel);
+    layout->addStretch();
 
     connect(
         phylogeneticButton,
@@ -166,17 +218,6 @@ QWidget* MainWindow::createDashboardPage()
         &MainWindow::selectGeneExpressionWorkspace
     );
 
-    layout->addStretch();
-    layout->addWidget(title);
-    layout->addWidget(subtitle);
-    layout->addWidget(description);
-    layout->addSpacing(20);
-    layout->addWidget(phylogeneticButton);
-    layout->addWidget(expressionButton);
-    layout->addSpacing(10);
-    layout->addWidget(statusLabel);
-    layout->addStretch();
-
     return page;
 }
 
@@ -185,10 +226,12 @@ QWidget* MainWindow::createPhylogeneticPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-     layout->setContentsMargins(60, 18, 60, 18);
-     layout->setSpacing(7); 
+    layout->setContentsMargins(60, 18, 60, 18);
+    layout->setSpacing(7);
 
-    QLabel* title = new QLabel("Phylogenetic Analysis");
+    QLabel* title =
+        new QLabel("Phylogenetic Analysis");
+
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet(
         "font-size: 30px;"
@@ -198,7 +241,7 @@ QWidget* MainWindow::createPhylogeneticPage()
 
     QLabel* description = new QLabel(
         "Import biological sequences, select a pairwise "
-        "distance algorithm, and generate a distance matrix."
+        "distance algorithm, and generate a phylogenetic tree."
     );
 
     description->setAlignment(Qt::AlignCenter);
@@ -208,11 +251,12 @@ QWidget* MainWindow::createPhylogeneticPage()
     QPushButton* importButton =
         new QPushButton("Select FASTA Files");
 
-    importButton->setMinimumHeight(48);
+    importButton->setMinimumHeight(42);
 
-  phylogeneticFileList = new QListWidget;
-phylogeneticFileList->setMinimumHeight(80);
-phylogeneticFileList->setMaximumHeight(110);
+    phylogeneticFileList = new QListWidget;
+    phylogeneticFileList->setMinimumHeight(80);
+    phylogeneticFileList->setMaximumHeight(110);
+
     QLabel* methodLabel =
         new QLabel("Pairwise distance method:");
 
@@ -234,7 +278,7 @@ phylogeneticFileList->setMaximumHeight(110);
     QPushButton* generateButton =
         new QPushButton("Generate Distance Matrix");
 
-    generateButton->setMinimumHeight(48);
+    generateButton->setMinimumHeight(42);
 
     matrixStatusLabel =
         new QLabel("No distance matrix generated");
@@ -246,18 +290,58 @@ phylogeneticFileList->setMaximumHeight(110);
     );
 
     distanceMatrixTable = new QTableWidget;
-
-    distanceMatrixTable->setMinimumHeight(200);
+    distanceMatrixTable->setMinimumHeight(125);
     distanceMatrixTable->setEditTriggers(
         QAbstractItemView::NoEditTriggers
     );
 
     distanceMatrixTable->setAlternatingRowColors(true);
 
+    analysisTabs = new QTabWidget;
+
+    analysisTabs->addTab(
+        distanceMatrixTable,
+        "Distance Matrix"
+    );
+
+    QWidget* treeTab = new QWidget;
+    QVBoxLayout* treeLayout =
+        new QVBoxLayout(treeTab);
+
+    QPushButton* generateTreeButton =
+        new QPushButton("Generate UPGMA Tree");
+
+    generateTreeButton->setMinimumHeight(42);
+
+    treeStatusLabel =
+        new QLabel("Generate a distance matrix first");
+
+    treeStatusLabel->setAlignment(Qt::AlignCenter);
+    treeStatusLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #40566B;"
+    );
+
+    treeOutput = new QPlainTextEdit;
+    treeOutput->setReadOnly(true);
+    treeOutput->setPlaceholderText(
+        "The generated phylogenetic tree "
+        "will appear here in Newick format."
+    );
+
+    treeLayout->addWidget(generateTreeButton);
+    treeLayout->addWidget(treeStatusLabel);
+    treeLayout->addWidget(treeOutput);
+
+    analysisTabs->addTab(
+        treeTab,
+        "Phylogenetic Tree"
+    );
+
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
-    backButton->setMinimumHeight(46);
+    backButton->setMinimumHeight(42);
 
     layout->addWidget(title);
     layout->addWidget(description);
@@ -267,8 +351,13 @@ phylogeneticFileList->setMaximumHeight(110);
     layout->addWidget(alignmentMethodBox);
     layout->addWidget(generateButton);
     layout->addWidget(matrixStatusLabel);
-    layout->addWidget(distanceMatrixTable);
+    layout->addWidget(analysisTabs);
     layout->addWidget(backButton);
+
+    layout->setStretchFactor(
+        analysisTabs,
+        1
+    );
 
     connect(
         importButton,
@@ -285,6 +374,13 @@ phylogeneticFileList->setMaximumHeight(110);
     );
 
     connect(
+        generateTreeButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::generatePhylogeneticTree
+    );
+
+    connect(
         backButton,
         &QPushButton::clicked,
         this,
@@ -294,43 +390,65 @@ phylogeneticFileList->setMaximumHeight(110);
     return page;
 }
 
-
 QWidget* MainWindow::createGeneExpressionPage()
 {
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(70, 45, 70, 45);
+    layout->setContentsMargins(80, 50, 80, 50);
     layout->setSpacing(18);
 
-    QLabel* title = new QLabel("Gene Expression Analysis");
-    title->setObjectName("pageTitle");
+    QLabel* title =
+        new QLabel("Gene Expression Analysis");
+
     title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet(
+        "font-size: 30px;"
+        "font-weight: bold;"
+        "color: #163A5F;"
+    );
 
     QLabel* description = new QLabel(
-        "Import a CSV or TSV gene-expression matrix. The dataset will later "
-        "pass through quality control, normalization, PCA, differential "
-        "expression analysis and candidate biomarker ranking."
+        "Import a CSV or TSV gene-expression dataset. "
+        "This workspace will perform normalization, "
+        "differential-expression analysis, PCA, heatmaps, "
+        "and volcano plots."
     );
-    description->setObjectName("descriptionLabel");
+
     description->setAlignment(Qt::AlignCenter);
     description->setWordWrap(true);
+    description->setStyleSheet("color: #40566B;");
 
     QPushButton* importButton =
         new QPushButton("Select Expression File");
 
+    importButton->setMinimumHeight(55);
+
     expressionFileLabel =
         new QLabel("No expression file selected");
 
-    expressionFileLabel->setObjectName("fileLabel");
     expressionFileLabel->setAlignment(Qt::AlignCenter);
     expressionFileLabel->setWordWrap(true);
-    expressionFileLabel->setMinimumHeight(100);
+    expressionFileLabel->setStyleSheet(
+        "background-color: white;"
+        "color: #40566B;"
+        "border: 1px solid #D7E0E8;"
+        "border-radius: 5px;"
+        "padding: 15px;"
+    );
 
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
-    backButton->setObjectName("backButton");
+    backButton->setMinimumHeight(48);
+
+    layout->addStretch();
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(importButton);
+    layout->addWidget(expressionFileLabel);
+    layout->addStretch();
+    layout->addWidget(backButton);
 
     connect(
         importButton,
@@ -346,23 +464,54 @@ QWidget* MainWindow::createGeneExpressionPage()
         &MainWindow::returnToDashboard
     );
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addSpacing(20);
-    layout->addWidget(importButton);
-    layout->addWidget(expressionFileLabel);
-    layout->addStretch();
-    layout->addWidget(backButton);
-
     return page;
 }
+
+void MainWindow::selectPhylogeneticWorkspace()
+{
+    currentProject.setWorkspaceType(
+        WorkspaceType::PhylogeneticAnalysis
+    );
+
+    statusLabel->setText(
+        "Selected workspace: "
+        + QString::fromStdString(
+            currentProject.getWorkspaceName()
+        )
+    );
+
+    pages->setCurrentIndex(1);
+}
+
+void MainWindow::selectGeneExpressionWorkspace()
+{
+    currentProject.setWorkspaceType(
+        WorkspaceType::GeneExpressionAnalysis
+    );
+
+    statusLabel->setText(
+        "Selected workspace: "
+        + QString::fromStdString(
+            currentProject.getWorkspaceName()
+        )
+    );
+
+    pages->setCurrentIndex(2);
+}
+
+void MainWindow::returnToDashboard()
+{
+    pages->setCurrentIndex(0);
+}
+
 void MainWindow::importFastaFiles()
 {
     QStringList filePaths = QFileDialog::getOpenFileNames(
         this,
         "Select FASTA Files",
         QString(),
-        "FASTA Files (*.fasta *.fa *.fna *.faa);;All Files (*.*)"
+        "FASTA Files (*.fasta *.fa *.fna *.faa);;"
+        "All Files (*.*)"
     );
 
     if (filePaths.isEmpty())
@@ -374,11 +523,28 @@ void MainWindow::importFastaFiles()
 
     selectedFastaFiles = filePaths;
     loadedSequences.clear();
+    currentDistanceMatrix.clear();
+    currentTree.clear();
+
     phylogeneticFileList->clear();
+    distanceMatrixTable->clear();
+    distanceMatrixTable->setRowCount(0);
+    distanceMatrixTable->setColumnCount(0);
+
+    treeOutput->clear();
+
+    matrixStatusLabel->setText(
+        "No distance matrix generated"
+    );
+
+    treeStatusLabel->setText(
+        "Generate a distance matrix first"
+    );
 
     try
     {
-        for (const QString& filePath : selectedFastaFiles)
+        for (const QString& filePath :
+             selectedFastaFiles)
         {
             QFileInfo fileInformation(filePath);
 
@@ -387,27 +553,31 @@ void MainWindow::importFastaFiles()
             );
 
             auto parsedSequences =
-                parser.parseFile(filePath.toStdString());
+                parser.parseFile(
+                    filePath.toStdString()
+                );
 
             for (auto& sequence : parsedSequences)
             {
                 QString sequenceInformation =
-                    QString("    %1 | %2 | Length: %3")
-                        .arg(
-                            QString::fromStdString(
-                                sequence->getIdentifier()
-                            )
+                    QString(
+                        "    %1 | %2 | Length: %3"
+                    )
+                    .arg(
+                        QString::fromStdString(
+                            sequence->getIdentifier()
                         )
-                        .arg(
-                            QString::fromStdString(
-                                sequence->getTypeName()
-                            )
+                    )
+                    .arg(
+                        QString::fromStdString(
+                            sequence->getTypeName()
                         )
-                        .arg(
-                            static_cast<qulonglong>(
-                                sequence->getLength()
-                            )
-                        );
+                    )
+                    .arg(
+                        static_cast<qulonglong>(
+                            sequence->getLength()
+                        )
+                    );
 
                 phylogeneticFileList->addItem(
                     sequenceInformation
@@ -422,7 +592,8 @@ void MainWindow::importFastaFiles()
         phylogeneticFileList->insertItem(
             0,
             QString(
-                "Successfully loaded %1 biological sequence(s)"
+                "Successfully loaded %1 "
+                "biological sequence(s)"
             ).arg(
                 static_cast<qulonglong>(
                     loadedSequences.size()
@@ -434,18 +605,19 @@ void MainWindow::importFastaFiles()
     {
         loadedSequences.clear();
 
+        phylogeneticFileList->clear();
+        phylogeneticFileList->addItem(
+            "FASTA import failed."
+        );
+
         QMessageBox::critical(
             this,
             "FASTA Import Error",
             QString::fromStdString(error.what())
         );
-
-        phylogeneticFileList->clear();
-        phylogeneticFileList->addItem(
-            "FASTA import failed. Please check the selected file."
-        );
     }
 }
+
 void MainWindow::generateDistanceMatrix()
 {
     if (loadedSequences.size() < 2)
@@ -453,7 +625,8 @@ void MainWindow::generateDistanceMatrix()
         QMessageBox::warning(
             this,
             "Insufficient Sequences",
-            "Please import at least two compatible sequences."
+            "Please import at least two "
+            "compatible sequences."
         );
 
         return;
@@ -464,12 +637,15 @@ void MainWindow::generateDistanceMatrix()
     if (alignmentMethodBox->currentText()
         == "Hamming Distance")
     {
-        aligner = std::make_unique<HammingAligner>();
+        aligner =
+            std::make_unique<HammingAligner>();
     }
     else
     {
         aligner =
-            std::make_unique<NeedlemanWunschAligner>();
+            std::make_unique<
+                NeedlemanWunschAligner
+            >();
     }
 
     try
@@ -477,6 +653,13 @@ void MainWindow::generateDistanceMatrix()
         currentDistanceMatrix.calculate(
             loadedSequences,
             *aligner
+        );
+
+        currentTree.clear();
+        treeOutput->clear();
+
+        treeStatusLabel->setText(
+            "Generate the UPGMA tree"
         );
 
         std::size_t matrixSize =
@@ -533,7 +716,9 @@ void MainWindow::generateDistanceMatrix()
                         )
                     );
 
-                item->setTextAlignment(Qt::AlignCenter);
+                item->setTextAlignment(
+                    Qt::AlignCenter
+                );
 
                 distanceMatrixTable->setItem(
                     static_cast<int>(row),
@@ -551,16 +736,22 @@ void MainWindow::generateDistanceMatrix()
 
         matrixStatusLabel->setText(
             QString("Matrix generated using %1")
-                .arg(alignmentMethodBox->currentText())
+                .arg(
+                    alignmentMethodBox->currentText()
+                )
         );
 
         matrixStatusLabel->setStyleSheet(
             "font-weight: bold;"
             "color: #2D6A4F;"
         );
+
+        analysisTabs->setCurrentIndex(0);
     }
     catch (const std::exception& error)
     {
+        currentDistanceMatrix.clear();
+
         distanceMatrixTable->clear();
         distanceMatrixTable->setRowCount(0);
         distanceMatrixTable->setColumnCount(0);
@@ -582,15 +773,74 @@ void MainWindow::generateDistanceMatrix()
     }
 }
 
+void MainWindow::generatePhylogeneticTree()
+{
+    if (currentDistanceMatrix.size() < 2)
+    {
+        QMessageBox::warning(
+            this,
+            "Distance Matrix Required",
+            "Generate a distance matrix before "
+            "building the phylogenetic tree."
+        );
+
+        return;
+    }
+
+    try
+    {
+        currentTree.build(currentDistanceMatrix);
+
+        QString newickTree =
+            QString::fromStdString(
+                currentTree.toNewick()
+            );
+
+        treeOutput->setPlainText(newickTree);
+
+        treeStatusLabel->setText(
+            "UPGMA tree generated successfully"
+        );
+
+        treeStatusLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #2D6A4F;"
+        );
+
+        analysisTabs->setCurrentIndex(1);
+    }
+    catch (const std::exception& error)
+    {
+        currentTree.clear();
+        treeOutput->clear();
+
+        treeStatusLabel->setText(
+            "Tree generation failed"
+        );
+
+        treeStatusLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #B02A37;"
+        );
+
+        QMessageBox::critical(
+            this,
+            "UPGMA Tree Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
 
 void MainWindow::importExpressionFile()
 {
-    QString filePath = QFileDialog::getOpenFileName(
-        this,
-        "Select Gene Expression File",
-        QString(),
-        "Expression Files (*.csv *.tsv);;All Files (*.*)"
-    );
+    QString filePath =
+        QFileDialog::getOpenFileName(
+            this,
+            "Select Gene Expression File",
+            QString(),
+            "Expression Files (*.csv *.tsv);;"
+            "All Files (*.*)"
+        );
 
     if (filePath.isEmpty())
     {
@@ -602,43 +852,13 @@ void MainWindow::importExpressionFile()
     QFileInfo fileInformation(filePath);
 
     expressionFileLabel->setText(
-        "Selected file: " + fileInformation.fileName()
+        "Selected file: "
+        + fileInformation.fileName()
     );
 
     expressionFileLabel->setToolTip(filePath);
 
-    statusLabel->setText("Expression file selected");
-}
-
-void MainWindow::selectPhylogeneticWorkspace()
-{
-    currentProject.setWorkspaceType(
-        WorkspaceType::PhylogeneticAnalysis
-    );
-
     statusLabel->setText(
-        "Selected workspace: " +
-        QString::fromStdString(currentProject.getWorkspaceName())
+        "Expression file selected"
     );
-
-    pages->setCurrentIndex(1);
-}
-
-void MainWindow::selectGeneExpressionWorkspace()
-{
-    currentProject.setWorkspaceType(
-        WorkspaceType::GeneExpressionAnalysis
-    );
-
-    statusLabel->setText(
-        "Selected workspace: " +
-        QString::fromStdString(currentProject.getWorkspaceName())
-    );
-
-    pages->setCurrentIndex(2);
-}
-
-void MainWindow::returnToDashboard()
-{
-    pages->setCurrentIndex(0);
 }
