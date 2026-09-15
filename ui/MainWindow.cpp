@@ -1,5 +1,6 @@
 #include "MainWindow.h"
-
+#include <QColor>
+#include <algorithm>
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QFileDialog>
@@ -24,6 +25,7 @@
 
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
+#include "visualization/PhylogeneticTreeWidget.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
@@ -140,7 +142,7 @@ MainWindow::MainWindow(QWidget* parent)
         "    color: #203040;"
         "    border: 1px solid #D7E0E8;"
         "    font-family: Consolas;"
-        "    font-size: 14px;"
+        "    font-size: 13px;"
         "}"
 
         "#statusLabel {"
@@ -308,6 +310,9 @@ QWidget* MainWindow::createPhylogeneticPage()
     QVBoxLayout* treeLayout =
         new QVBoxLayout(treeTab);
 
+    treeLayout->setContentsMargins(10, 10, 10, 10);
+    treeLayout->setSpacing(7);
+
     QPushButton* generateTreeButton =
         new QPushButton("Generate UPGMA Tree");
 
@@ -322,15 +327,22 @@ QWidget* MainWindow::createPhylogeneticPage()
         "color: #40566B;"
     );
 
+    treeGraphic =
+        new PhylogeneticTreeWidget;
+
+    treeGraphic->setMinimumHeight(170);
+
     treeOutput = new QPlainTextEdit;
     treeOutput->setReadOnly(true);
+    treeOutput->setMaximumHeight(65);
     treeOutput->setPlaceholderText(
-        "The generated phylogenetic tree "
-        "will appear here in Newick format."
+        "The Newick representation "
+        "will appear here."
     );
 
     treeLayout->addWidget(generateTreeButton);
     treeLayout->addWidget(treeStatusLabel);
+    treeLayout->addWidget(treeGraphic, 1);
     treeLayout->addWidget(treeOutput);
 
     analysisTabs->addTab(
@@ -506,13 +518,14 @@ void MainWindow::returnToDashboard()
 
 void MainWindow::importFastaFiles()
 {
-    QStringList filePaths = QFileDialog::getOpenFileNames(
-        this,
-        "Select FASTA Files",
-        QString(),
-        "FASTA Files (*.fasta *.fa *.fna *.faa);;"
-        "All Files (*.*)"
-    );
+    QStringList filePaths =
+        QFileDialog::getOpenFileNames(
+            this,
+            "Select FASTA Files",
+            QString(),
+            "FASTA Files (*.fasta *.fa *.fna *.faa);;"
+            "All Files (*.*)"
+        );
 
     if (filePaths.isEmpty())
     {
@@ -523,22 +536,35 @@ void MainWindow::importFastaFiles()
 
     selectedFastaFiles = filePaths;
     loadedSequences.clear();
+
     currentDistanceMatrix.clear();
     currentTree.clear();
 
     phylogeneticFileList->clear();
+
     distanceMatrixTable->clear();
     distanceMatrixTable->setRowCount(0);
     distanceMatrixTable->setColumnCount(0);
 
     treeOutput->clear();
+    treeGraphic->clearTree();
 
     matrixStatusLabel->setText(
         "No distance matrix generated"
     );
 
+    matrixStatusLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #40566B;"
+    );
+
     treeStatusLabel->setText(
         "Generate a distance matrix first"
+    );
+
+    treeStatusLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #40566B;"
     );
 
     try
@@ -549,7 +575,8 @@ void MainWindow::importFastaFiles()
             QFileInfo fileInformation(filePath);
 
             phylogeneticFileList->addItem(
-                "FILE: " + fileInformation.fileName()
+                "FILE: "
+                + fileInformation.fileName()
             );
 
             auto parsedSequences =
@@ -559,7 +586,7 @@ void MainWindow::importFastaFiles()
 
             for (auto& sequence : parsedSequences)
             {
-                QString sequenceInformation =
+                QString information =
                     QString(
                         "    %1 | %2 | Length: %3"
                     )
@@ -580,7 +607,7 @@ void MainWindow::importFastaFiles()
                     );
 
                 phylogeneticFileList->addItem(
-                    sequenceInformation
+                    information
                 );
 
                 loadedSequences.push_back(
@@ -613,7 +640,9 @@ void MainWindow::importFastaFiles()
         QMessageBox::critical(
             this,
             "FASTA Import Error",
-            QString::fromStdString(error.what())
+            QString::fromStdString(
+                error.what()
+            )
         );
     }
 }
@@ -657,13 +686,35 @@ void MainWindow::generateDistanceMatrix()
 
         currentTree.clear();
         treeOutput->clear();
+        treeGraphic->clearTree();
 
         treeStatusLabel->setText(
             "Generate the UPGMA tree"
         );
 
+        treeStatusLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #40566B;"
+        );
+
         std::size_t matrixSize =
             currentDistanceMatrix.size();
+
+        const auto& matrixValues =
+            currentDistanceMatrix.getValues();
+
+        double maximumDistance = 0.0;
+
+        for (const auto& row : matrixValues)
+        {
+            for (double distance : row)
+            {
+                maximumDistance = std::max(
+                    maximumDistance,
+                    distance
+                );
+            }
+        }
 
         distanceMatrixTable->clear();
 
@@ -685,13 +736,11 @@ void MainWindow::generateDistanceMatrix()
             );
         }
 
-        distanceMatrixTable->setHorizontalHeaderLabels(
-            labels
-        );
+        distanceMatrixTable
+            ->setHorizontalHeaderLabels(labels);
 
-        distanceMatrixTable->setVerticalHeaderLabels(
-            labels
-        );
+        distanceMatrixTable
+            ->setVerticalHeaderLabels(labels);
 
         for (std::size_t row = 0;
              row < matrixSize;
@@ -707,6 +756,33 @@ void MainWindow::generateDistanceMatrix()
                         column
                     );
 
+                double normalizedDistance =
+                    maximumDistance > 0.0
+                        ? distance / maximumDistance
+                        : 0.0;
+
+                normalizedDistance = std::clamp(
+                    normalizedDistance,
+                    0.0,
+                    1.0
+                );
+
+                double colorHue =
+                    (1.0 - normalizedDistance) * 0.33;
+
+                QColor cellColor =
+                    QColor::fromHsvF(
+                        colorHue,
+                        0.45,
+                        1.0
+                    );
+
+                if (row == column)
+                {
+                    cellColor =
+                        QColor("#B7E4C7");
+                }
+
                 QTableWidgetItem* item =
                     new QTableWidgetItem(
                         QString::number(
@@ -718,6 +794,29 @@ void MainWindow::generateDistanceMatrix()
 
                 item->setTextAlignment(
                     Qt::AlignCenter
+                );
+
+                item->setBackground(cellColor);
+                item->setForeground(
+                    QColor("#152536")
+                );
+
+                item->setToolTip(
+                    QString(
+                        "%1 versus %2\nDistance: %3"
+                    )
+                    .arg(labels.at(
+                        static_cast<int>(row)
+                    ))
+                    .arg(labels.at(
+                        static_cast<int>(column)
+                    ))
+                    .arg(
+                        distance,
+                        0,
+                        'f',
+                        6
+                    )
                 );
 
                 distanceMatrixTable->setItem(
@@ -735,10 +834,12 @@ void MainWindow::generateDistanceMatrix()
             );
 
         matrixStatusLabel->setText(
-            QString("Matrix generated using %1")
-                .arg(
-                    alignmentMethodBox->currentText()
-                )
+            QString(
+                "Matrix generated using %1"
+                " | Green = similar, Red = distant"
+            ).arg(
+                alignmentMethodBox->currentText()
+            )
         );
 
         matrixStatusLabel->setStyleSheet(
@@ -768,11 +869,12 @@ void MainWindow::generateDistanceMatrix()
         QMessageBox::critical(
             this,
             "Distance Matrix Error",
-            QString::fromStdString(error.what())
+            QString::fromStdString(
+                error.what()
+            )
         );
     }
 }
-
 void MainWindow::generatePhylogeneticTree()
 {
     if (currentDistanceMatrix.size() < 2)
@@ -789,14 +891,22 @@ void MainWindow::generatePhylogeneticTree()
 
     try
     {
-        currentTree.build(currentDistanceMatrix);
+        currentTree.build(
+            currentDistanceMatrix
+        );
+
+        treeGraphic->setTree(
+            &currentTree
+        );
 
         QString newickTree =
             QString::fromStdString(
                 currentTree.toNewick()
             );
 
-        treeOutput->setPlainText(newickTree);
+        treeOutput->setPlainText(
+            newickTree
+        );
 
         treeStatusLabel->setText(
             "UPGMA tree generated successfully"
@@ -813,6 +923,7 @@ void MainWindow::generatePhylogeneticTree()
     {
         currentTree.clear();
         treeOutput->clear();
+        treeGraphic->clearTree();
 
         treeStatusLabel->setText(
             "Tree generation failed"
@@ -826,7 +937,9 @@ void MainWindow::generatePhylogeneticTree()
         QMessageBox::critical(
             this,
             "UPGMA Tree Error",
-            QString::fromStdString(error.what())
+            QString::fromStdString(
+                error.what()
+            )
         );
     }
 }
@@ -856,7 +969,9 @@ void MainWindow::importExpressionFile()
         + fileInformation.fileName()
     );
 
-    expressionFileLabel->setToolTip(filePath);
+    expressionFileLabel->setToolTip(
+        filePath
+    );
 
     statusLabel->setText(
         "Expression file selected"
