@@ -28,6 +28,7 @@
 #include <utility>
 
 #include "export/PhylogeneticExporter.h"
+#include "gene_expression/ExpressionParser.h"
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
 #include "visualization/PhylogeneticTreeWidget.h"
@@ -158,6 +159,7 @@ MainWindow::MainWindow(QWidget* parent)
 
         QTableWidget {
             background-color: white;
+            alternate-background-color: #EDF3F8;
             color: #203040;
             border: 1px solid #D7E0E8;
             gridline-color: #CBD5DF;
@@ -271,7 +273,6 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
     importButton->setMinimumHeight(50);
 
     phylogeneticFileList = new QListWidget;
-
     phylogeneticFileList->setMinimumHeight(250);
     phylogeneticFileList->addItem(
         "No FASTA sequences imported."
@@ -584,8 +585,8 @@ QWidget* MainWindow::createGeneExpressionPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(80, 50, 80, 50);
-    layout->setSpacing(18);
+    layout->setContentsMargins(45, 25, 45, 25);
+    layout->setSpacing(10);
 
     QLabel* title =
         createPageTitle(
@@ -594,8 +595,8 @@ QWidget* MainWindow::createGeneExpressionPage()
 
     QLabel* description = createDescription(
         "Import a CSV or TSV expression dataset. "
-        "Normalization, differential expression, PCA, "
-        "volcano plots and heatmaps will be added here."
+        "Genes must be rows and biological samples "
+        "must be columns."
     );
 
     QPushButton* importButton =
@@ -603,7 +604,7 @@ QWidget* MainWindow::createGeneExpressionPage()
             "Select Expression File"
         );
 
-    importButton->setMinimumHeight(55);
+    importButton->setMinimumHeight(48);
 
     expressionFileLabel =
         new QLabel("No expression file selected");
@@ -619,20 +620,45 @@ QWidget* MainWindow::createGeneExpressionPage()
         "color: #40566B;"
         "border: 1px solid #D7E0E8;"
         "border-radius: 6px;"
-        "padding: 18px;"
+        "padding: 10px;"
+    );
+
+    expressionSummaryLabel =
+        new QLabel(
+            "Import a dataset to view its summary."
+        );
+
+    expressionSummaryLabel->setAlignment(
+        Qt::AlignCenter
+    );
+
+    expressionSummaryLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #40566B;"
+    );
+
+    expressionPreviewTable =
+        new QTableWidget;
+
+    expressionPreviewTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+
+    expressionPreviewTable->setAlternatingRowColors(
+        true
     );
 
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
-    backButton->setMinimumHeight(48);
+    backButton->setMinimumHeight(45);
 
-    layout->addStretch();
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(importButton);
     layout->addWidget(expressionFileLabel);
-    layout->addStretch();
+    layout->addWidget(expressionSummaryLabel);
+    layout->addWidget(expressionPreviewTable, 1);
     layout->addWidget(backButton);
 
     connect(
@@ -1263,7 +1289,10 @@ void MainWindow::exportTreeResults()
         QPixmap treeImage =
             treeGraphic->grab();
 
-        if (!treeImage.save(imagePath, "PNG"))
+        if (!treeImage.save(
+                imagePath,
+                "PNG"
+            ))
         {
             throw std::runtime_error(
                 "Could not export tree image."
@@ -1306,16 +1335,208 @@ void MainWindow::importExpressionFile()
         return;
     }
 
-    selectedExpressionFile = filePath;
+    ExpressionParser parser;
 
-    QFileInfo fileInformation(filePath);
+    try
+    {
+        ExpressionDataset parsedDataset =
+            parser.parseFile(
+                filePath.toStdString()
+            );
 
-    expressionFileLabel->setText(
-        "Selected file: "
-        + fileInformation.fileName()
-    );
+        expressionDataset =
+            std::make_unique<ExpressionDataset>(
+                parsedDataset
+            );
 
-    expressionFileLabel->setToolTip(
-        filePath
-    );
+        selectedExpressionFile = filePath;
+
+        QFileInfo fileInformation(filePath);
+
+        expressionFileLabel->setText(
+            "Selected file: "
+            + fileInformation.fileName()
+        );
+
+        expressionFileLabel->setToolTip(
+            filePath
+        );
+
+        std::size_t geneCount =
+            expressionDataset->getGeneCount();
+
+        std::size_t sampleCount =
+            expressionDataset->getSampleCount();
+
+        const std::size_t maximumPreviewRows =
+            200;
+
+        std::size_t displayedGeneCount =
+            std::min(
+                geneCount,
+                maximumPreviewRows
+            );
+
+        expressionPreviewTable->clear();
+
+        expressionPreviewTable->setRowCount(
+            static_cast<int>(
+                displayedGeneCount
+            )
+        );
+
+        expressionPreviewTable->setColumnCount(
+            static_cast<int>(
+                sampleCount
+            )
+        );
+
+        QStringList sampleLabels;
+
+        for (const std::string& sample :
+             expressionDataset->getSampleNames())
+        {
+            sampleLabels.append(
+                QString::fromStdString(sample)
+            );
+        }
+
+        expressionPreviewTable
+            ->setHorizontalHeaderLabels(
+                sampleLabels
+            );
+
+        QStringList geneLabels;
+
+        for (std::size_t gene = 0;
+             gene < displayedGeneCount;
+             ++gene)
+        {
+            geneLabels.append(
+                QString::fromStdString(
+                    expressionDataset
+                        ->getGeneNames()
+                        .at(gene)
+                )
+            );
+
+            for (std::size_t sample = 0;
+                 sample < sampleCount;
+                 ++sample)
+            {
+                double value =
+                    expressionDataset->getValue(
+                        gene,
+                        sample
+                    );
+
+                QTableWidgetItem* item =
+                    new QTableWidgetItem(
+                        QString::number(
+                            value,
+                            'f',
+                            3
+                        )
+                    );
+
+                item->setTextAlignment(
+                    Qt::AlignCenter
+                );
+
+                expressionPreviewTable->setItem(
+                    static_cast<int>(gene),
+                    static_cast<int>(sample),
+                    item
+                );
+            }
+        }
+
+        expressionPreviewTable
+            ->setVerticalHeaderLabels(
+                geneLabels
+            );
+
+        expressionPreviewTable
+            ->horizontalHeader()
+            ->setSectionResizeMode(
+                QHeaderView::ResizeToContents
+            );
+
+        expressionPreviewTable
+            ->verticalHeader()
+            ->setSectionResizeMode(
+                QHeaderView::ResizeToContents
+            );
+
+        QString summary =
+            QString(
+                "Valid dataset | %1 genes | "
+                "%2 samples | Status: %3"
+            )
+            .arg(
+                static_cast<qulonglong>(
+                    geneCount
+                )
+            )
+            .arg(
+                static_cast<qulonglong>(
+                    sampleCount
+                )
+            )
+            .arg(
+                QString::fromStdString(
+                    expressionDataset
+                        ->getStatusName()
+                )
+            );
+
+        if (geneCount > maximumPreviewRows)
+        {
+            summary += QString(
+                " | Previewing first %1 genes"
+            ).arg(
+                static_cast<qulonglong>(
+                    maximumPreviewRows
+                )
+            );
+        }
+
+        expressionSummaryLabel->setText(
+            summary
+        );
+
+        expressionSummaryLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #2D6A4F;"
+        );
+    }
+    catch (const std::exception& error)
+    {
+        expressionDataset.reset();
+
+        expressionPreviewTable->clear();
+        expressionPreviewTable->setRowCount(0);
+        expressionPreviewTable->setColumnCount(0);
+
+        expressionFileLabel->setText(
+            "Expression file import failed"
+        );
+
+        expressionSummaryLabel->setText(
+            "Invalid expression dataset"
+        );
+
+        expressionSummaryLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #B02A37;"
+        );
+
+        QMessageBox::critical(
+            this,
+            "Expression Import Error",
+            QString::fromStdString(
+                error.what()
+            )
+        );
+    }
 }

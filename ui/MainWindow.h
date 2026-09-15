@@ -3,7 +3,7 @@
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
-
+#include "gene_expression/ExpressionDataset.h"
 #include <memory>
 #include <vector>
 
@@ -31,6 +31,7 @@ public:
 
 private:
     static constexpr int DashboardPage = 0;
+    
     static constexpr int PhylogeneticSetupPage = 1;
     static constexpr int DistanceMatrixPage = 2;
     static constexpr int PhylogeneticTreePage = 3;
@@ -39,7 +40,10 @@ private:
     Project currentProject;
     QStackedWidget* pages = nullptr;
     QLabel* statusLabel = nullptr;
+    std::unique_ptr<ExpressionDataset> expressionDataset;
 
+    QLabel* expressionSummaryLabel = nullptr;
+    QTableWidget* expressionPreviewTable = nullptr;
     QListWidget* phylogeneticFileList = nullptr;
     QPushButton* openMatrixButton = nullptr;
     QPushButton* openTreeButton = nullptr;
