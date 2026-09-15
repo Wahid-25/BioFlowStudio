@@ -25,6 +25,10 @@ qt_add_executable(BioFlowStudio
     src/phylogenetics/PairwiseAligner.h
     src/phylogenetics/DistanceMatrix.cpp
     src/phylogenetics/DistanceMatrix.h
+    src/gene_expression/NormalizationStrategy.cpp
+    src/gene_expression/NormalizationStrategy.h
+    src/gene_expression/SampleGrouping.cpp
+    src/gene_expression/SampleGrouping.h
     src/phylogenetics/Sequence.cpp
     src/phylogenetics/Sequence.h
     src/phylogenetics/FastaParser.cpp
