@@ -18,6 +18,10 @@ qt_add_executable(BioFlowStudio
     src/export/PhylogeneticExporter.cpp
     src/export/PhylogeneticExporter.h
     src/phylogenetics/PairwiseAligner.cpp
+    src/gene_expression/ExpressionDataset.cpp
+    src/gene_expression/ExpressionDataset.h
+    src/gene_expression/ExpressionParser.cpp
+    src/gene_expression/ExpressionParser.h
     src/phylogenetics/PairwiseAligner.h
     src/phylogenetics/DistanceMatrix.cpp
     src/phylogenetics/DistanceMatrix.h
