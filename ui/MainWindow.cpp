@@ -11,7 +11,16 @@
 #include <QFileInfo>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QAbstractItemView>
+#include <QComboBox>
+#include <QHeaderView>
+#include <QMessageBox>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 
+#include <memory>
+
+#include "phylogenetics/PairwiseAligner.h"
 #include <exception>
 #include <utility>
 
@@ -176,33 +185,90 @@ QWidget* MainWindow::createPhylogeneticPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(70, 45, 70, 45);
-    layout->setSpacing(18);
+     layout->setContentsMargins(60, 18, 60, 18);
+     layout->setSpacing(7); 
 
     QLabel* title = new QLabel("Phylogenetic Analysis");
-    title->setObjectName("pageTitle");
     title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet(
+        "font-size: 30px;"
+        "font-weight: bold;"
+        "color: #163A5F;"
+    );
 
     QLabel* description = new QLabel(
-        "Import multiple FASTA files containing DNA or protein sequences. "
-        "The files will later pass through validation, alignment, distance "
-        "calculation and phylogenetic tree construction."
+        "Import biological sequences, select a pairwise "
+        "distance algorithm, and generate a distance matrix."
     );
-    description->setObjectName("descriptionLabel");
+
     description->setAlignment(Qt::AlignCenter);
     description->setWordWrap(true);
+    description->setStyleSheet("color: #40566B;");
 
     QPushButton* importButton =
         new QPushButton("Select FASTA Files");
 
-    phylogeneticFileList = new QListWidget;
-    phylogeneticFileList->setMinimumHeight(180);
-    phylogeneticFileList->addItem("No FASTA files selected");
+    importButton->setMinimumHeight(48);
+
+  phylogeneticFileList = new QListWidget;
+phylogeneticFileList->setMinimumHeight(80);
+phylogeneticFileList->setMaximumHeight(110);
+    QLabel* methodLabel =
+        new QLabel("Pairwise distance method:");
+
+    methodLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #163A5F;"
+    );
+
+    alignmentMethodBox = new QComboBox;
+
+    alignmentMethodBox->addItem(
+        "Needleman-Wunsch Global Distance"
+    );
+
+    alignmentMethodBox->addItem(
+        "Hamming Distance"
+    );
+
+    QPushButton* generateButton =
+        new QPushButton("Generate Distance Matrix");
+
+    generateButton->setMinimumHeight(48);
+
+    matrixStatusLabel =
+        new QLabel("No distance matrix generated");
+
+    matrixStatusLabel->setAlignment(Qt::AlignCenter);
+    matrixStatusLabel->setStyleSheet(
+        "font-weight: bold;"
+        "color: #40566B;"
+    );
+
+    distanceMatrixTable = new QTableWidget;
+
+    distanceMatrixTable->setMinimumHeight(200);
+    distanceMatrixTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+
+    distanceMatrixTable->setAlternatingRowColors(true);
 
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
-    backButton->setObjectName("backButton");
+    backButton->setMinimumHeight(46);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(importButton);
+    layout->addWidget(phylogeneticFileList);
+    layout->addWidget(methodLabel);
+    layout->addWidget(alignmentMethodBox);
+    layout->addWidget(generateButton);
+    layout->addWidget(matrixStatusLabel);
+    layout->addWidget(distanceMatrixTable);
+    layout->addWidget(backButton);
 
     connect(
         importButton,
@@ -212,22 +278,22 @@ QWidget* MainWindow::createPhylogeneticPage()
     );
 
     connect(
+        generateButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::generateDistanceMatrix
+    );
+
+    connect(
         backButton,
         &QPushButton::clicked,
         this,
         &MainWindow::returnToDashboard
     );
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addSpacing(10);
-    layout->addWidget(importButton);
-    layout->addWidget(phylogeneticFileList);
-    layout->addStretch();
-    layout->addWidget(backButton);
-
     return page;
 }
+
 
 QWidget* MainWindow::createGeneExpressionPage()
 {
@@ -380,6 +446,142 @@ void MainWindow::importFastaFiles()
         );
     }
 }
+void MainWindow::generateDistanceMatrix()
+{
+    if (loadedSequences.size() < 2)
+    {
+        QMessageBox::warning(
+            this,
+            "Insufficient Sequences",
+            "Please import at least two compatible sequences."
+        );
+
+        return;
+    }
+
+    std::unique_ptr<PairwiseAligner> aligner;
+
+    if (alignmentMethodBox->currentText()
+        == "Hamming Distance")
+    {
+        aligner = std::make_unique<HammingAligner>();
+    }
+    else
+    {
+        aligner =
+            std::make_unique<NeedlemanWunschAligner>();
+    }
+
+    try
+    {
+        currentDistanceMatrix.calculate(
+            loadedSequences,
+            *aligner
+        );
+
+        std::size_t matrixSize =
+            currentDistanceMatrix.size();
+
+        distanceMatrixTable->clear();
+
+        distanceMatrixTable->setRowCount(
+            static_cast<int>(matrixSize)
+        );
+
+        distanceMatrixTable->setColumnCount(
+            static_cast<int>(matrixSize)
+        );
+
+        QStringList labels;
+
+        for (const std::string& label :
+             currentDistanceMatrix.getLabels())
+        {
+            labels.append(
+                QString::fromStdString(label)
+            );
+        }
+
+        distanceMatrixTable->setHorizontalHeaderLabels(
+            labels
+        );
+
+        distanceMatrixTable->setVerticalHeaderLabels(
+            labels
+        );
+
+        for (std::size_t row = 0;
+             row < matrixSize;
+             ++row)
+        {
+            for (std::size_t column = 0;
+                 column < matrixSize;
+                 ++column)
+            {
+                double distance =
+                    currentDistanceMatrix.getDistance(
+                        row,
+                        column
+                    );
+
+                QTableWidgetItem* item =
+                    new QTableWidgetItem(
+                        QString::number(
+                            distance,
+                            'f',
+                            4
+                        )
+                    );
+
+                item->setTextAlignment(Qt::AlignCenter);
+
+                distanceMatrixTable->setItem(
+                    static_cast<int>(row),
+                    static_cast<int>(column),
+                    item
+                );
+            }
+        }
+
+        distanceMatrixTable
+            ->horizontalHeader()
+            ->setSectionResizeMode(
+                QHeaderView::Stretch
+            );
+
+        matrixStatusLabel->setText(
+            QString("Matrix generated using %1")
+                .arg(alignmentMethodBox->currentText())
+        );
+
+        matrixStatusLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #2D6A4F;"
+        );
+    }
+    catch (const std::exception& error)
+    {
+        distanceMatrixTable->clear();
+        distanceMatrixTable->setRowCount(0);
+        distanceMatrixTable->setColumnCount(0);
+
+        matrixStatusLabel->setText(
+            "Distance matrix generation failed"
+        );
+
+        matrixStatusLabel->setStyleSheet(
+            "font-weight: bold;"
+            "color: #B02A37;"
+        );
+
+        QMessageBox::critical(
+            this,
+            "Distance Matrix Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
 
 void MainWindow::importExpressionFile()
 {

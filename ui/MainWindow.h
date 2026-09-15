@@ -5,9 +5,11 @@
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
+#include "phylogenetics/DistanceMatrix.h"
 
 #include "core/Project.h"
-
+class QComboBox;
+class QTableWidget;
 class QLabel;
 class QListWidget;
 class QStackedWidget;
@@ -34,7 +36,12 @@ private:
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticPage();
     QWidget* createGeneExpressionPage();
+    QComboBox* alignmentMethodBox = nullptr;
+    QTableWidget* distanceMatrixTable = nullptr;
+    QLabel* matrixStatusLabel = nullptr;
 
+    DistanceMatrix currentDistanceMatrix;
+    void generateDistanceMatrix();
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
     void returnToDashboard();
