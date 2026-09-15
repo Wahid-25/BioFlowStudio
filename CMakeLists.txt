@@ -11,6 +11,8 @@ qt_standard_project_setup()
 
 qt_add_executable(BioFlowStudio
     src/main.cpp
+    src/phylogenetics/UPGMATree.cpp
+    src/phylogenetics/UPGMATree.h
     src/phylogenetics/PairwiseAligner.cpp
     src/phylogenetics/PairwiseAligner.h
     src/phylogenetics/DistanceMatrix.cpp
