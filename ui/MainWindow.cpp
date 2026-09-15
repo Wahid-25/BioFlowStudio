@@ -20,6 +20,7 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QtCharts/QChart>
 
 #include <algorithm>
 #include <exception>
@@ -28,13 +29,43 @@
 #include <utility>
 
 #include "export/PhylogeneticExporter.h"
+#include "gene_expression/NormalizationStrategy.h"
 #include "gene_expression/ExpressionParser.h"
+#include "gene_expression/WelchTTestAnalyzer.h"
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
 #include "visualization/PhylogeneticTreeWidget.h"
+#include "visualization/VolcanoPlotWidget.h"
 
 namespace
 {
+class NumericTableWidgetItem : public QTableWidgetItem
+{
+public:
+    NumericTableWidgetItem(double value, int precision)
+        : QTableWidgetItem(QString::number(value, 'g', precision)),
+          numericValue(value)
+    {
+        setTextAlignment(Qt::AlignCenter);
+    }
+
+    bool operator<(const QTableWidgetItem& other) const override
+    {
+        const auto* numericOther =
+            dynamic_cast<const NumericTableWidgetItem*>(&other);
+
+        if (numericOther != nullptr)
+        {
+            return numericValue < numericOther->numericValue;
+        }
+
+        return QTableWidgetItem::operator<(other);
+    }
+
+private:
+    double numericValue;
+};
+
 QLabel* createPageTitle(const QString& text)
 {
     QLabel* label = new QLabel(text);
@@ -83,6 +114,9 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createDistanceMatrixPage());
     pages->addWidget(createPhylogeneticTreePage());
     pages->addWidget(createGeneExpressionPage());
+    pages->addWidget(createExpressionConfigurationPage());
+    pages->addWidget(createExpressionResultsPage());
+    pages->addWidget(createExpressionVolcanoPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -648,6 +682,14 @@ QWidget* MainWindow::createGeneExpressionPage()
         true
     );
 
+    configureExpressionButton =
+        new QPushButton(
+            "Configure Differential Expression Analysis"
+        );
+
+    configureExpressionButton->setMinimumHeight(48);
+    configureExpressionButton->setEnabled(false);
+
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
@@ -659,6 +701,7 @@ QWidget* MainWindow::createGeneExpressionPage()
     layout->addWidget(expressionFileLabel);
     layout->addWidget(expressionSummaryLabel);
     layout->addWidget(expressionPreviewTable, 1);
+    layout->addWidget(configureExpressionButton);
     layout->addWidget(backButton);
 
     connect(
@@ -669,10 +712,255 @@ QWidget* MainWindow::createGeneExpressionPage()
     );
 
     connect(
+        configureExpressionButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionConfigurationPage
+    );
+
+    connect(
         backButton,
         &QPushButton::clicked,
         this,
         &MainWindow::returnToDashboard
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionConfigurationPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(45, 25, 45, 25);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "Configure Differential Expression Analysis"
+    );
+
+    QLabel* description = createDescription(
+        "Assign each sample to Control or Treatment, choose a "
+        "normalization strategy, and run Welch's independent t-test."
+    );
+
+    sampleGroupingTable = new QTableWidget;
+    sampleGroupingTable->setColumnCount(2);
+    sampleGroupingTable->setHorizontalHeaderLabels(
+        {"Sample", "Experimental Group"}
+    );
+    sampleGroupingTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+    sampleGroupingTable->setAlternatingRowColors(true);
+    sampleGroupingTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::Stretch
+    );
+    sampleGroupingTable->verticalHeader()->setVisible(false);
+
+    QLabel* normalizationLabel = new QLabel(
+        "Normalization strategy:"
+    );
+    normalizationLabel->setStyleSheet(
+        "font-weight: bold; color: #163A5F;"
+    );
+
+    normalizationMethodBox = new QComboBox;
+    normalizationMethodBox->addItems(
+        {
+            "Raw values (no transformation)",
+            "Log2 transformation: log2(x + 1)",
+            "Z-score normalization per gene"
+        }
+    );
+    normalizationMethodBox->setMinimumHeight(40);
+
+    groupingStatusLabel = new QLabel(
+        "Import a dataset before configuring the analysis."
+    );
+    groupingStatusLabel->setAlignment(Qt::AlignCenter);
+    groupingStatusLabel->setWordWrap(true);
+    groupingStatusLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    QPushButton* runButton = new QPushButton(
+        "Run Differential Expression Analysis"
+    );
+    runButton->setMinimumHeight(48);
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Expression Dataset"
+    );
+    backButton->setMinimumHeight(44);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(sampleGroupingTable, 1);
+    layout->addWidget(normalizationLabel);
+    layout->addWidget(normalizationMethodBox);
+    layout->addWidget(groupingStatusLabel);
+    layout->addWidget(runButton);
+    layout->addWidget(backButton);
+
+    connect(
+        runButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::runDifferentialExpressionAnalysis
+    );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToGeneExpressionSetup
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionResultsPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(35, 22, 35, 22);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "Differential Expression Results"
+    );
+
+    QLabel* description = createDescription(
+        "Genes are classified using adjusted p-value < 0.05 and "
+        "absolute log2 fold change >= 1. Click a column heading to sort."
+    );
+
+    expressionResultsSummaryLabel = new QLabel(
+        "Run an analysis to generate results."
+    );
+    expressionResultsSummaryLabel->setAlignment(Qt::AlignCenter);
+    expressionResultsSummaryLabel->setWordWrap(true);
+    expressionResultsSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    expressionResultsTable = new QTableWidget;
+    expressionResultsTable->setColumnCount(7);
+    expressionResultsTable->setHorizontalHeaderLabels(
+        {
+            "Gene",
+            "Control Mean",
+            "Treatment Mean",
+            "Log2 Fold Change",
+            "P-value",
+            "Adjusted P-value",
+            "Regulation"
+        }
+    );
+    expressionResultsTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+    expressionResultsTable->setSelectionBehavior(
+        QAbstractItemView::SelectRows
+    );
+    expressionResultsTable->setAlternatingRowColors(true);
+    expressionResultsTable->verticalHeader()->setVisible(false);
+    expressionResultsTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::ResizeToContents
+    );
+    expressionResultsTable->horizontalHeader()->setStretchLastSection(true);
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Analysis Configuration"
+    );
+    backButton->setMinimumHeight(44);
+
+    QPushButton* volcanoButton = new QPushButton(
+        "Open Interactive Volcano Plot"
+    );
+    volcanoButton->setMinimumHeight(46);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(expressionResultsSummaryLabel);
+    layout->addWidget(expressionResultsTable, 1);
+    layout->addWidget(volcanoButton);
+    layout->addWidget(backButton);
+
+    connect(
+        volcanoButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionVolcanoPage
+    );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionConfigurationPage
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionVolcanoPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(30, 20, 30, 20);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "Interactive Volcano Plot"
+    );
+
+    QLabel* description = createDescription(
+        "Green points are upregulated, red points are downregulated, "
+        "and grey points are not significant. Hover over a point to "
+        "see its gene name and values. Drag a rectangle to zoom."
+    );
+
+    volcanoPlotWidget = new VolcanoPlotWidget;
+
+    QPushButton* resetZoomButton = new QPushButton(
+        "Reset Plot Zoom"
+    );
+    resetZoomButton->setMinimumHeight(42);
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Differential Expression Results"
+    );
+    backButton->setMinimumHeight(44);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(resetZoomButton);
+    buttonLayout->addWidget(backButton);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(volcanoPlotWidget, 1);
+    layout->addLayout(buttonLayout);
+
+    connect(
+        resetZoomButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            volcanoPlotWidget->chart()->zoomReset();
+        }
+    );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToExpressionResults
     );
 
     return page;
@@ -728,6 +1016,39 @@ void MainWindow::openPhylogeneticTreePage()
     );
 }
 
+void MainWindow::openExpressionConfigurationPage()
+{
+    if (!expressionDataset)
+    {
+        QMessageBox::warning(
+            this,
+            "No Expression Dataset",
+            "Please import a valid expression dataset first."
+        );
+        return;
+    }
+
+    populateSampleGroupingTable();
+    pages->setCurrentIndex(ExpressionConfigurationPage);
+}
+
+void MainWindow::openExpressionVolcanoPage()
+{
+    if (expressionResults.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Analysis Results",
+            "Run differential expression analysis before opening "
+            "the volcano plot."
+        );
+        return;
+    }
+
+    volcanoPlotWidget->setResults(expressionResults);
+    pages->setCurrentIndex(ExpressionVolcanoPage);
+}
+
 void MainWindow::returnToDashboard()
 {
     pages->setCurrentIndex(
@@ -740,6 +1061,16 @@ void MainWindow::returnToPhylogeneticSetup()
     pages->setCurrentIndex(
         PhylogeneticSetupPage
     );
+}
+
+void MainWindow::returnToGeneExpressionSetup()
+{
+    pages->setCurrentIndex(GeneExpressionPage);
+}
+
+void MainWindow::returnToExpressionResults()
+{
+    pages->setCurrentIndex(ExpressionResultsPage);
 }
 
 void MainWindow::importFastaFiles()
@@ -1349,6 +1680,12 @@ void MainWindow::importExpressionFile()
                 parsedDataset
             );
 
+        sampleGrouping.automaticallyAssign(
+            expressionDataset->getSampleNames()
+        );
+        expressionResults.clear();
+        configureExpressionButton->setEnabled(true);
+
         selectedExpressionFile = filePath;
 
         QFileInfo fileInformation(filePath);
@@ -1513,6 +1850,9 @@ void MainWindow::importExpressionFile()
     catch (const std::exception& error)
     {
         expressionDataset.reset();
+        sampleGrouping.clear();
+        expressionResults.clear();
+        configureExpressionButton->setEnabled(false);
 
         expressionPreviewTable->clear();
         expressionPreviewTable->setRowCount(0);
@@ -1539,4 +1879,300 @@ void MainWindow::importExpressionFile()
             )
         );
     }
+}
+
+void MainWindow::populateSampleGroupingTable()
+{
+    if (!expressionDataset)
+    {
+        return;
+    }
+
+    const auto& sampleNames = expressionDataset->getSampleNames();
+
+    if (sampleGrouping.getGroups().size() != sampleNames.size())
+    {
+        sampleGrouping.automaticallyAssign(sampleNames);
+    }
+
+    sampleGroupingTable->clearContents();
+    sampleGroupingTable->setRowCount(
+        static_cast<int>(sampleNames.size())
+    );
+    sampleGroupBoxes.clear();
+    sampleGroupBoxes.reserve(sampleNames.size());
+
+    for (std::size_t index = 0; index < sampleNames.size(); ++index)
+    {
+        QTableWidgetItem* sampleItem = new QTableWidgetItem(
+            QString::fromStdString(sampleNames.at(index))
+        );
+        sampleItem->setTextAlignment(Qt::AlignCenter);
+
+        QComboBox* groupBox = new QComboBox;
+        groupBox->addItems(
+            {"Unassigned", "Control", "Treatment"}
+        );
+
+        SampleGroup group = sampleGrouping.getGroup(index);
+
+        if (group == SampleGroup::Control)
+        {
+            groupBox->setCurrentIndex(1);
+        }
+        else if (group == SampleGroup::Treatment)
+        {
+            groupBox->setCurrentIndex(2);
+        }
+        else
+        {
+            groupBox->setCurrentIndex(0);
+        }
+
+        sampleGroupingTable->setItem(
+            static_cast<int>(index),
+            0,
+            sampleItem
+        );
+        sampleGroupingTable->setCellWidget(
+            static_cast<int>(index),
+            1,
+            groupBox
+        );
+
+        sampleGroupBoxes.push_back(groupBox);
+
+        connect(
+            groupBox,
+            &QComboBox::currentIndexChanged,
+            this,
+            [this]()
+            {
+                std::size_t controlCount = 0;
+                std::size_t treatmentCount = 0;
+
+                for (const QComboBox* box : sampleGroupBoxes)
+                {
+                    if (box->currentIndex() == 1)
+                    {
+                        ++controlCount;
+                    }
+                    else if (box->currentIndex() == 2)
+                    {
+                        ++treatmentCount;
+                    }
+                }
+
+                groupingStatusLabel->setText(
+                    QString("Control: %1 sample(s) | Treatment: %2 sample(s)")
+                        .arg(static_cast<qulonglong>(controlCount))
+                        .arg(static_cast<qulonglong>(treatmentCount))
+                );
+
+                bool valid = controlCount >= 2 && treatmentCount >= 2;
+                groupingStatusLabel->setStyleSheet(
+                    valid
+                        ? "font-weight: bold; color: #2D6A4F;"
+                        : "font-weight: bold; color: #B26A00;"
+                );
+            }
+        );
+    }
+
+    std::size_t controlCount = 0;
+    std::size_t treatmentCount = 0;
+
+    for (const QComboBox* box : sampleGroupBoxes)
+    {
+        controlCount += box->currentIndex() == 1 ? 1 : 0;
+        treatmentCount += box->currentIndex() == 2 ? 1 : 0;
+    }
+
+    groupingStatusLabel->setText(
+        QString("Control: %1 sample(s) | Treatment: %2 sample(s)")
+            .arg(static_cast<qulonglong>(controlCount))
+            .arg(static_cast<qulonglong>(treatmentCount))
+    );
+
+    groupingStatusLabel->setStyleSheet(
+        controlCount >= 2 && treatmentCount >= 2
+            ? "font-weight: bold; color: #2D6A4F;"
+            : "font-weight: bold; color: #B26A00;"
+    );
+}
+
+void MainWindow::runDifferentialExpressionAnalysis()
+{
+    if (!expressionDataset)
+    {
+        QMessageBox::warning(
+            this,
+            "No Expression Dataset",
+            "Please import a valid expression dataset first."
+        );
+        return;
+    }
+
+    sampleGrouping.automaticallyAssign(
+        expressionDataset->getSampleNames()
+    );
+
+    for (std::size_t index = 0;
+         index < sampleGroupBoxes.size();
+         ++index)
+    {
+        SampleGroup group = SampleGroup::Unassigned;
+
+        if (sampleGroupBoxes.at(index)->currentIndex() == 1)
+        {
+            group = SampleGroup::Control;
+        }
+        else if (sampleGroupBoxes.at(index)->currentIndex() == 2)
+        {
+            group = SampleGroup::Treatment;
+        }
+
+        sampleGrouping.setGroup(index, group);
+    }
+
+    if (!sampleGrouping.isValid())
+    {
+        QMessageBox::warning(
+            this,
+            "Invalid Sample Groups",
+            "Assign at least two samples to Control and at least two "
+            "samples to Treatment."
+        );
+        return;
+    }
+
+    try
+    {
+        std::unique_ptr<NormalizationStrategy> normalizer;
+
+        if (normalizationMethodBox->currentIndex() == 0)
+        {
+            normalizer = std::make_unique<RawNormalization>();
+        }
+        else if (normalizationMethodBox->currentIndex() == 1)
+        {
+            normalizer = std::make_unique<Log2Normalization>();
+        }
+        else
+        {
+            normalizer = std::make_unique<ZScoreNormalization>();
+        }
+
+        std::vector<std::vector<double>> normalizedValues =
+            normalizer->normalize(*expressionDataset);
+
+        WelchTTestAnalyzer analyzer;
+        expressionResults = analyzer.analyze(
+            *expressionDataset,
+            normalizedValues,
+            sampleGrouping
+        );
+
+        populateExpressionResultsTable();
+        pages->setCurrentIndex(ExpressionResultsPage);
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Differential Expression Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::populateExpressionResultsTable()
+{
+    expressionResultsTable->setSortingEnabled(false);
+    expressionResultsTable->clearContents();
+    expressionResultsTable->setRowCount(
+        static_cast<int>(expressionResults.size())
+    );
+
+    std::size_t upregulatedCount = 0;
+    std::size_t downregulatedCount = 0;
+
+    for (std::size_t row = 0; row < expressionResults.size(); ++row)
+    {
+        const DifferentialExpressionResult& result =
+            expressionResults.at(row);
+
+        QTableWidgetItem* geneItem = new QTableWidgetItem(
+            QString::fromStdString(result.getGeneName())
+        );
+        geneItem->setTextAlignment(Qt::AlignCenter);
+
+        QTableWidgetItem* regulationItem = new QTableWidgetItem(
+            QString::fromStdString(result.getRegulationName())
+        );
+        regulationItem->setTextAlignment(Qt::AlignCenter);
+
+        if (result.getRegulationStatus() == RegulationStatus::Upregulated)
+        {
+            regulationItem->setBackground(QColor("#CDEFD8"));
+            regulationItem->setForeground(QColor("#176B35"));
+            ++upregulatedCount;
+        }
+        else if (result.getRegulationStatus() == RegulationStatus::Downregulated)
+        {
+            regulationItem->setBackground(QColor("#FFD6D6"));
+            regulationItem->setForeground(QColor("#9C1C1C"));
+            ++downregulatedCount;
+        }
+        else
+        {
+            regulationItem->setBackground(QColor("#E8EDF2"));
+            regulationItem->setForeground(QColor("#40566B"));
+        }
+
+        int tableRow = static_cast<int>(row);
+        expressionResultsTable->setItem(tableRow, 0, geneItem);
+        expressionResultsTable->setItem(
+            tableRow, 1,
+            new NumericTableWidgetItem(result.getControlMean(), 7)
+        );
+        expressionResultsTable->setItem(
+            tableRow, 2,
+            new NumericTableWidgetItem(result.getTreatmentMean(), 7)
+        );
+        expressionResultsTable->setItem(
+            tableRow, 3,
+            new NumericTableWidgetItem(result.getLog2FoldChange(), 7)
+        );
+        expressionResultsTable->setItem(
+            tableRow, 4,
+            new NumericTableWidgetItem(result.getPValue(), 7)
+        );
+        expressionResultsTable->setItem(
+            tableRow, 5,
+            new NumericTableWidgetItem(result.getAdjustedPValue(), 7)
+        );
+        expressionResultsTable->setItem(tableRow, 6, regulationItem);
+    }
+
+    std::size_t significantCount =
+        upregulatedCount + downregulatedCount;
+
+    expressionResultsSummaryLabel->setText(
+        QString(
+            "%1 genes analyzed | %2 significant | "
+            "%3 upregulated | %4 downregulated | Normalization: %5"
+        )
+        .arg(static_cast<qulonglong>(expressionResults.size()))
+        .arg(static_cast<qulonglong>(significantCount))
+        .arg(static_cast<qulonglong>(upregulatedCount))
+        .arg(static_cast<qulonglong>(downregulatedCount))
+        .arg(normalizationMethodBox->currentText())
+    );
+    expressionResultsSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #2D6A4F;"
+    );
+
+    expressionResultsTable->setSortingEnabled(true);
+    expressionResultsTable->sortItems(5, Qt::AscendingOrder);
 }
