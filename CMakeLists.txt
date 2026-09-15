@@ -15,6 +15,8 @@ qt_add_executable(BioFlowStudio
     src/visualization/PhylogeneticTreeWidget.cpp
     src/visualization/PhylogeneticTreeWidget.h
     src/phylogenetics/UPGMATree.h
+    src/export/PhylogeneticExporter.cpp
+    src/export/PhylogeneticExporter.h
     src/phylogenetics/PairwiseAligner.cpp
     src/phylogenetics/PairwiseAligner.h
     src/phylogenetics/DistanceMatrix.cpp

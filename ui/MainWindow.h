@@ -58,4 +58,5 @@ private:
     void generatePhylogeneticTree();
     void importFastaFiles();
     void importExpressionFile();
+    void exportPhylogeneticResults();
 };
