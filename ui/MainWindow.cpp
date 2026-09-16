@@ -29,6 +29,7 @@
 #include <utility>
 
 #include "export/PhylogeneticExporter.h"
+#include "export/GeneExpressionExporter.h"
 #include "gene_expression/NormalizationStrategy.h"
 #include "gene_expression/PCAAnalyzer.h"
 #include "gene_expression/ExpressionParser.h"
@@ -903,11 +904,17 @@ QWidget* MainWindow::createExpressionResultsPage()
     visualizationButtonLayout->addWidget(heatmapButton);
     visualizationButtonLayout->addWidget(pcaButton);
 
+    QPushButton* exportTablesButton = new QPushButton(
+        "Export Analysis Tables and Summary"
+    );
+    exportTablesButton->setMinimumHeight(46);
+
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(expressionResultsSummaryLabel);
     layout->addWidget(expressionResultsTable, 1);
     layout->addLayout(visualizationButtonLayout);
+    layout->addWidget(exportTablesButton);
     layout->addWidget(backButton);
 
     connect(
@@ -929,6 +936,13 @@ QWidget* MainWindow::createExpressionResultsPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openExpressionPCAPage
+    );
+
+    connect(
+        exportTablesButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::exportExpressionTables
     );
 
     connect(
@@ -966,6 +980,11 @@ QWidget* MainWindow::createExpressionVolcanoPage()
     );
     resetZoomButton->setMinimumHeight(42);
 
+    QPushButton* exportButton = new QPushButton(
+        "Export Volcano Plot PNG"
+    );
+    exportButton->setMinimumHeight(42);
+
     QPushButton* backButton = new QPushButton(
         "Back to Differential Expression Results"
     );
@@ -973,6 +992,7 @@ QWidget* MainWindow::createExpressionVolcanoPage()
 
     QHBoxLayout* buttonLayout = new QHBoxLayout;
     buttonLayout->addWidget(resetZoomButton);
+    buttonLayout->addWidget(exportButton);
     buttonLayout->addWidget(backButton);
 
     layout->addWidget(title);
@@ -987,6 +1007,20 @@ QWidget* MainWindow::createExpressionVolcanoPage()
         [this]()
         {
             volcanoPlotWidget->chart()->zoomReset();
+        }
+    );
+
+    connect(
+        exportButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                volcanoPlotWidget,
+                "volcano_plot.png",
+                "Export Volcano Plot"
+            );
         }
     );
 
@@ -1061,12 +1095,35 @@ QWidget* MainWindow::createExpressionHeatmapPage()
     );
     backButton->setMinimumHeight(44);
 
+    QPushButton* exportButton = new QPushButton(
+        "Export Heatmap PNG"
+    );
+    exportButton->setMinimumHeight(44);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(exportButton);
+    buttonLayout->addWidget(backButton);
+
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(expressionHeatmapSummaryLabel);
     layout->addLayout(legendLayout);
     layout->addWidget(expressionHeatmapWidget, 1);
-    layout->addWidget(backButton);
+    layout->addLayout(buttonLayout);
+
+    connect(
+        exportButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                expressionHeatmapWidget,
+                "expression_heatmap.png",
+                "Export Expression Heatmap"
+            );
+        }
+    );
 
     connect(
         backButton,
@@ -1112,6 +1169,11 @@ QWidget* MainWindow::createExpressionPCAPage()
     );
     resetZoomButton->setMinimumHeight(42);
 
+    QPushButton* exportButton = new QPushButton(
+        "Export PCA Plot PNG"
+    );
+    exportButton->setMinimumHeight(42);
+
     QPushButton* backButton = new QPushButton(
         "Back to Differential Expression Results"
     );
@@ -1119,6 +1181,7 @@ QWidget* MainWindow::createExpressionPCAPage()
 
     QHBoxLayout* buttonLayout = new QHBoxLayout;
     buttonLayout->addWidget(resetZoomButton);
+    buttonLayout->addWidget(exportButton);
     buttonLayout->addWidget(backButton);
 
     layout->addWidget(title);
@@ -1134,6 +1197,20 @@ QWidget* MainWindow::createExpressionPCAPage()
         [this]()
         {
             pcaPlotWidget->chart()->zoomReset();
+        }
+    );
+
+    connect(
+        exportButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                pcaPlotWidget,
+                "pca_sample_plot.png",
+                "Export PCA Sample Plot"
+            );
         }
     );
 
@@ -2475,4 +2552,128 @@ void MainWindow::populateExpressionResultsTable()
 
     expressionResultsTable->setSortingEnabled(true);
     expressionResultsTable->sortItems(5, Qt::AscendingOrder);
+}
+
+void MainWindow::exportExpressionTables()
+{
+    if (!expressionDataset
+        || expressionResults.empty()
+        || currentNormalizedExpressionValues.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "Nothing to Export",
+            "Run differential expression analysis before exporting results."
+        );
+        return;
+    }
+
+    QString directoryPath = QFileDialog::getExistingDirectory(
+        this,
+        "Select Analysis Export Folder",
+        QString(),
+        QFileDialog::ShowDirsOnly
+    );
+
+    if (directoryPath.isEmpty())
+    {
+        return;
+    }
+
+    try
+    {
+        QDir exportDirectory(directoryPath);
+        GeneExpressionExporter exporter;
+
+        exporter.exportResultsCSV(
+            exportDirectory
+                .filePath("differential_expression_results.csv")
+                .toStdString(),
+            expressionResults
+        );
+
+        exporter.exportNormalizedMatrixCSV(
+            exportDirectory
+                .filePath("normalized_expression_matrix.csv")
+                .toStdString(),
+            *expressionDataset,
+            currentNormalizedExpressionValues,
+            sampleGrouping
+        );
+
+        exporter.exportAnalysisSummary(
+            exportDirectory
+                .filePath("analysis_summary.txt")
+                .toStdString(),
+            *expressionDataset,
+            expressionResults,
+            sampleGrouping,
+            normalizationMethodBox->currentText().toStdString()
+        );
+
+        QMessageBox::information(
+            this,
+            "Export Completed",
+            "Three files were exported successfully:\n\n"
+            "differential_expression_results.csv\n"
+            "normalized_expression_matrix.csv\n"
+            "analysis_summary.txt\n\n"
+            "Folder: " + directoryPath
+        );
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Expression Export Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::exportWidgetImage(
+    QWidget* widget,
+    const QString& suggestedFileName,
+    const QString& dialogTitle
+)
+{
+    if (widget == nullptr)
+    {
+        return;
+    }
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        dialogTitle,
+        suggestedFileName,
+        "PNG Images (*.png)"
+    );
+
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    if (!filePath.endsWith(".png", Qt::CaseInsensitive))
+    {
+        filePath += ".png";
+    }
+
+    QPixmap image = widget->grab();
+
+    if (image.isNull() || !image.save(filePath, "PNG"))
+    {
+        QMessageBox::critical(
+            this,
+            "Image Export Error",
+            "The visualization could not be saved as a PNG image."
+        );
+        return;
+    }
+
+    QMessageBox::information(
+        this,
+        "Image Exported",
+        "Visualization saved successfully:\n" + filePath
+    );
 }

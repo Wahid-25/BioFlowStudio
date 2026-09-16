@@ -23,6 +23,8 @@ qt_add_executable(BioFlowStudio
     src/phylogenetics/UPGMATree.h
     src/export/PhylogeneticExporter.cpp
     src/export/PhylogeneticExporter.h
+    src/export/GeneExpressionExporter.cpp
+    src/export/GeneExpressionExporter.h
     src/phylogenetics/PairwiseAligner.cpp
     src/gene_expression/ExpressionDataset.cpp
     src/gene_expression/ExpressionDataset.h

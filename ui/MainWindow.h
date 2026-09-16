@@ -128,6 +128,12 @@ private:
 
     void exportMatrixResults();
     void exportTreeResults();
+    void exportExpressionTables();
+    void exportWidgetImage(
+        QWidget* widget,
+        const QString& suggestedFileName,
+        const QString& dialogTitle
+    );
 
     void populateDistanceMatrixTable(
         const DistanceMatrix& matrix
