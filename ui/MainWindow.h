@@ -26,6 +26,7 @@ class QWidget;
 
 class PairwiseAligner;
 class ExpressionHeatmapWidget;
+class PCAPlotWidget;
 class PhylogeneticTreeWidget;
 class VolcanoPlotWidget;
 
@@ -44,6 +45,7 @@ private:
     static constexpr int ExpressionResultsPage = 6;
     static constexpr int ExpressionVolcanoPage = 7;
     static constexpr int ExpressionHeatmapPage = 8;
+    static constexpr int ExpressionPCAPage = 9;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -88,6 +90,8 @@ private:
     VolcanoPlotWidget* volcanoPlotWidget = nullptr;
     ExpressionHeatmapWidget* expressionHeatmapWidget = nullptr;
     QLabel* expressionHeatmapSummaryLabel = nullptr;
+    PCAPlotWidget* pcaPlotWidget = nullptr;
+    QLabel* pcaSummaryLabel = nullptr;
 
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
@@ -98,6 +102,7 @@ private:
     QWidget* createExpressionResultsPage();
     QWidget* createExpressionVolcanoPage();
     QWidget* createExpressionHeatmapPage();
+    QWidget* createExpressionPCAPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -107,6 +112,7 @@ private:
     void openExpressionConfigurationPage();
     void openExpressionVolcanoPage();
     void openExpressionHeatmapPage();
+    void openExpressionPCAPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();

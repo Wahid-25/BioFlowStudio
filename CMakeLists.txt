@@ -16,6 +16,8 @@ qt_add_executable(BioFlowStudio
     src/visualization/PhylogeneticTreeWidget.h
     src/visualization/ExpressionHeatmapWidget.cpp
     src/visualization/ExpressionHeatmapWidget.h
+    src/visualization/PCAPlotWidget.cpp
+    src/visualization/PCAPlotWidget.h
     src/visualization/VolcanoPlotWidget.cpp
     src/visualization/VolcanoPlotWidget.h
     src/phylogenetics/UPGMATree.h
@@ -44,6 +46,10 @@ qt_add_executable(BioFlowStudio
     src/gene_expression/StatisticsUtilities.h
     src/gene_expression/WelchTTestAnalyzer.cpp
     src/gene_expression/WelchTTestAnalyzer.h
+    src/gene_expression/PCAAnalyzer.cpp
+    src/gene_expression/PCAAnalyzer.h
+    src/gene_expression/PCAResult.cpp
+    src/gene_expression/PCAResult.h
     src/core/Project.cpp
     src/core/Project.h
     src/core/Dataset.cpp

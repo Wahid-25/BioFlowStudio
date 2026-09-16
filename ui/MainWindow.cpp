@@ -30,12 +30,14 @@
 
 #include "export/PhylogeneticExporter.h"
 #include "gene_expression/NormalizationStrategy.h"
+#include "gene_expression/PCAAnalyzer.h"
 #include "gene_expression/ExpressionParser.h"
 #include "gene_expression/WelchTTestAnalyzer.h"
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
 #include "visualization/PhylogeneticTreeWidget.h"
 #include "visualization/ExpressionHeatmapWidget.h"
+#include "visualization/PCAPlotWidget.h"
 #include "visualization/VolcanoPlotWidget.h"
 
 namespace
@@ -119,6 +121,7 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionResultsPage());
     pages->addWidget(createExpressionVolcanoPage());
     pages->addWidget(createExpressionHeatmapPage());
+    pages->addWidget(createExpressionPCAPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -890,9 +893,15 @@ QWidget* MainWindow::createExpressionResultsPage()
     );
     heatmapButton->setMinimumHeight(46);
 
+    QPushButton* pcaButton = new QPushButton(
+        "Open PCA Sample Plot"
+    );
+    pcaButton->setMinimumHeight(46);
+
     QHBoxLayout* visualizationButtonLayout = new QHBoxLayout;
     visualizationButtonLayout->addWidget(volcanoButton);
     visualizationButtonLayout->addWidget(heatmapButton);
+    visualizationButtonLayout->addWidget(pcaButton);
 
     layout->addWidget(title);
     layout->addWidget(description);
@@ -913,6 +922,13 @@ QWidget* MainWindow::createExpressionResultsPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openExpressionHeatmapPage
+    );
+
+    connect(
+        pcaButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionPCAPage
     );
 
     connect(
@@ -1051,6 +1067,75 @@ QWidget* MainWindow::createExpressionHeatmapPage()
     layout->addLayout(legendLayout);
     layout->addWidget(expressionHeatmapWidget, 1);
     layout->addWidget(backButton);
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToExpressionResults
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionPCAPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(30, 20, 30, 20);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "PCA Sample-Clustering Plot"
+    );
+
+    QLabel* description = createDescription(
+        "Each point represents one biological sample. Samples positioned "
+        "near each other have similar overall gene-expression profiles. "
+        "Hover over a point to identify the sample."
+    );
+
+    pcaSummaryLabel = new QLabel(
+        "Run an analysis to calculate PCA."
+    );
+    pcaSummaryLabel->setAlignment(Qt::AlignCenter);
+    pcaSummaryLabel->setWordWrap(true);
+    pcaSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    pcaPlotWidget = new PCAPlotWidget;
+
+    QPushButton* resetZoomButton = new QPushButton(
+        "Reset Plot Zoom"
+    );
+    resetZoomButton->setMinimumHeight(42);
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Differential Expression Results"
+    );
+    backButton->setMinimumHeight(44);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(resetZoomButton);
+    buttonLayout->addWidget(backButton);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(pcaSummaryLabel);
+    layout->addWidget(pcaPlotWidget, 1);
+    layout->addLayout(buttonLayout);
+
+    connect(
+        resetZoomButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            pcaPlotWidget->chart()->zoomReset();
+        }
+    );
 
     connect(
         backButton,
@@ -1201,6 +1286,62 @@ void MainWindow::openExpressionHeatmapPage()
         QMessageBox::critical(
             this,
             "Heatmap Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::openExpressionPCAPage()
+{
+    if (!expressionDataset
+        || currentNormalizedExpressionValues.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Analysis Results",
+            "Run differential expression analysis before opening "
+            "the PCA plot."
+        );
+        return;
+    }
+
+    try
+    {
+        PCAAnalyzer analyzer;
+        PCAResult result = analyzer.analyze(
+            *expressionDataset,
+            currentNormalizedExpressionValues
+        );
+
+        pcaPlotWidget->setResult(result, sampleGrouping);
+
+        pcaSummaryLabel->setText(
+            QString(
+                "%1 samples analyzed | PC1 explains %2% | "
+                "PC2 explains %3% | Combined: %4%"
+            )
+            .arg(static_cast<qulonglong>(result.getSampleCount()))
+            .arg(result.getPC1ExplainedVariance(), 0, 'f', 1)
+            .arg(result.getPC2ExplainedVariance(), 0, 'f', 1)
+            .arg(
+                result.getPC1ExplainedVariance()
+                + result.getPC2ExplainedVariance(),
+                0,
+                'f',
+                1
+            )
+        );
+        pcaSummaryLabel->setStyleSheet(
+            "font-weight: bold; color: #2D6A4F;"
+        );
+
+        pages->setCurrentIndex(ExpressionPCAPage);
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "PCA Error",
             QString::fromStdString(error.what())
         );
     }
