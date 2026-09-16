@@ -167,7 +167,9 @@ void GeneExpressionExporter::exportAnalysisSummary(
     const ExpressionDataset& dataset,
     const std::vector<DifferentialExpressionResult>& results,
     const SampleGrouping& grouping,
-    const std::string& normalizationName
+    const std::string& normalizationName,
+    double adjustedPValueThreshold,
+    double minimumAbsoluteLog2FoldChange
 ) const
 {
     std::ofstream output(filePath);
@@ -207,8 +209,10 @@ void GeneExpressionExporter::exportAnalysisSummary(
         << "Normalization: " << normalizationName << '\n'
         << "Statistical test: Welch independent t-test\n"
         << "Multiple-testing correction: Benjamini-Hochberg FDR\n"
-        << "Significance thresholds: adjusted p-value < 0.05 and "
-           "absolute log2 fold change >= 1\n\n"
+        << "Adjusted p-value threshold: "
+        << adjustedPValueThreshold << '\n'
+        << "Minimum absolute log2 fold change: "
+        << minimumAbsoluteLog2FoldChange << "\n\n"
         << "Upregulated genes: " << upregulated << '\n'
         << "Downregulated genes: " << downregulated << '\n'
         << "Total significant genes: "

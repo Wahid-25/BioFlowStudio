@@ -12,7 +12,9 @@ public:
     explicit VolcanoPlotWidget(QWidget* parent = nullptr);
 
     void setResults(
-        const std::vector<DifferentialExpressionResult>& results
+        const std::vector<DifferentialExpressionResult>& results,
+        double adjustedPValueThreshold = 0.05,
+        double foldChangeThreshold = 1.0
     );
 
     void clearPlot();

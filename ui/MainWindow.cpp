@@ -4,11 +4,14 @@
 #include <QColor>
 #include <QComboBox>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPixmap>
@@ -853,6 +856,84 @@ QWidget* MainWindow::createExpressionResultsPage()
         "font-weight: bold; color: #40566B;"
     );
 
+    QGridLayout* filterLayout = new QGridLayout;
+    filterLayout->setHorizontalSpacing(10);
+    filterLayout->setVerticalSpacing(7);
+
+    QLabel* searchLabel = new QLabel("Search gene:");
+    searchLabel->setStyleSheet("font-weight: bold;");
+
+    geneSearchBox = new QLineEdit;
+    geneSearchBox->setPlaceholderText("Example: TP53");
+    geneSearchBox->setClearButtonEnabled(true);
+
+    QLabel* regulationLabel = new QLabel("Regulation:");
+    regulationLabel->setStyleSheet("font-weight: bold;");
+
+    regulationFilterBox = new QComboBox;
+    regulationFilterBox->addItems(
+        {
+            "All genes",
+            "Upregulated",
+            "Downregulated",
+            "Not significant"
+        }
+    );
+
+    QLabel* maximumLabel = new QLabel("Display:");
+    maximumLabel->setStyleSheet("font-weight: bold;");
+
+    maximumResultsBox = new QComboBox;
+    maximumResultsBox->addItem("All results", 0);
+    maximumResultsBox->addItem("Top 10", 10);
+    maximumResultsBox->addItem("Top 20", 20);
+    maximumResultsBox->addItem("Top 50", 50);
+
+    QLabel* pValueLabel = new QLabel("Adjusted p-value <=");
+    pValueLabel->setStyleSheet("font-weight: bold;");
+
+    adjustedPThresholdBox = new QDoubleSpinBox;
+    adjustedPThresholdBox->setRange(0.000001, 1.0);
+    adjustedPThresholdBox->setDecimals(6);
+    adjustedPThresholdBox->setSingleStep(0.01);
+    adjustedPThresholdBox->setValue(0.05);
+
+    QLabel* foldChangeLabel = new QLabel("Minimum |log2 FC|:");
+    foldChangeLabel->setStyleSheet("font-weight: bold;");
+
+    foldChangeThresholdBox = new QDoubleSpinBox;
+    foldChangeThresholdBox->setRange(0.0, 20.0);
+    foldChangeThresholdBox->setDecimals(2);
+    foldChangeThresholdBox->setSingleStep(0.25);
+    foldChangeThresholdBox->setValue(1.0);
+
+    QPushButton* resetFiltersButton = new QPushButton(
+        "Reset Filters"
+    );
+    resetFiltersButton->setMinimumHeight(36);
+
+    expressionFilterSummaryLabel = new QLabel(
+        "Run an analysis to enable interactive filtering."
+    );
+    expressionFilterSummaryLabel->setAlignment(Qt::AlignCenter);
+    expressionFilterSummaryLabel->setWordWrap(true);
+    expressionFilterSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    filterLayout->addWidget(searchLabel, 0, 0);
+    filterLayout->addWidget(geneSearchBox, 0, 1);
+    filterLayout->addWidget(regulationLabel, 0, 2);
+    filterLayout->addWidget(regulationFilterBox, 0, 3);
+    filterLayout->addWidget(maximumLabel, 0, 4);
+    filterLayout->addWidget(maximumResultsBox, 0, 5);
+    filterLayout->addWidget(pValueLabel, 1, 0);
+    filterLayout->addWidget(adjustedPThresholdBox, 1, 1);
+    filterLayout->addWidget(foldChangeLabel, 1, 2);
+    filterLayout->addWidget(foldChangeThresholdBox, 1, 3);
+    filterLayout->addWidget(resetFiltersButton, 1, 4, 1, 2);
+    filterLayout->addWidget(expressionFilterSummaryLabel, 2, 0, 1, 6);
+
     expressionResultsTable = new QTableWidget;
     expressionResultsTable->setColumnCount(7);
     expressionResultsTable->setHorizontalHeaderLabels(
@@ -912,10 +993,53 @@ QWidget* MainWindow::createExpressionResultsPage()
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(expressionResultsSummaryLabel);
+    layout->addLayout(filterLayout);
     layout->addWidget(expressionResultsTable, 1);
     layout->addLayout(visualizationButtonLayout);
     layout->addWidget(exportTablesButton);
     layout->addWidget(backButton);
+
+    connect(
+        geneSearchBox,
+        &QLineEdit::textChanged,
+        this,
+        [this]() { applyExpressionFilters(); }
+    );
+
+    connect(
+        regulationFilterBox,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this]() { applyExpressionFilters(); }
+    );
+
+    connect(
+        maximumResultsBox,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this]() { applyExpressionFilters(); }
+    );
+
+    connect(
+        adjustedPThresholdBox,
+        &QDoubleSpinBox::valueChanged,
+        this,
+        [this]() { applyExpressionFilters(); }
+    );
+
+    connect(
+        foldChangeThresholdBox,
+        &QDoubleSpinBox::valueChanged,
+        this,
+        [this]() { applyExpressionFilters(); }
+    );
+
+    connect(
+        resetFiltersButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::resetExpressionFilters
+    );
 
     connect(
         volcanoButton,
@@ -1292,7 +1416,7 @@ void MainWindow::openExpressionConfigurationPage()
 
 void MainWindow::openExpressionVolcanoPage()
 {
-    if (expressionResults.empty())
+    if (classifiedExpressionResults.empty())
     {
         QMessageBox::warning(
             this,
@@ -1303,14 +1427,18 @@ void MainWindow::openExpressionVolcanoPage()
         return;
     }
 
-    volcanoPlotWidget->setResults(expressionResults);
+    volcanoPlotWidget->setResults(
+        classifiedExpressionResults,
+        adjustedPThresholdBox->value(),
+        foldChangeThresholdBox->value()
+    );
     pages->setCurrentIndex(ExpressionVolcanoPage);
 }
 
 void MainWindow::openExpressionHeatmapPage()
 {
     if (!expressionDataset
-        || expressionResults.empty()
+        || filteredExpressionResults.empty()
         || currentNormalizedExpressionValues.empty())
     {
         QMessageBox::warning(
@@ -1329,14 +1457,14 @@ void MainWindow::openExpressionHeatmapPage()
         expressionHeatmapWidget->setData(
             *expressionDataset,
             currentNormalizedExpressionValues,
-            expressionResults,
+            filteredExpressionResults,
             sampleGrouping,
             maximumDisplayedGenes
         );
 
         std::size_t displayedGenes = std::min(
             maximumDisplayedGenes,
-            expressionDataset->getGeneCount()
+            filteredExpressionResults.size()
         );
 
         expressionHeatmapSummaryLabel->setText(
@@ -2059,6 +2187,8 @@ void MainWindow::importExpressionFile()
             expressionDataset->getSampleNames()
         );
         expressionResults.clear();
+        classifiedExpressionResults.clear();
+        filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(true);
 
@@ -2228,6 +2358,8 @@ void MainWindow::importExpressionFile()
         expressionDataset.reset();
         sampleGrouping.clear();
         expressionResults.clear();
+        classifiedExpressionResults.clear();
+        filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(false);
 
@@ -2450,7 +2582,7 @@ void MainWindow::runDifferentialExpressionAnalysis()
             sampleGrouping
         );
 
-        populateExpressionResultsTable();
+        resetExpressionFilters();
         pages->setCurrentIndex(ExpressionResultsPage);
     }
     catch (const std::exception& error)
@@ -2463,21 +2595,123 @@ void MainWindow::runDifferentialExpressionAnalysis()
     }
 }
 
+ExpressionFilterSettings
+MainWindow::getCurrentExpressionFilterSettings() const
+{
+    ExpressionFilterSettings settings;
+
+    settings.geneQuery = geneSearchBox->text().toStdString();
+    settings.adjustedPValueThreshold = adjustedPThresholdBox->value();
+    settings.minimumAbsoluteLog2FoldChange =
+        foldChangeThresholdBox->value();
+    settings.maximumResults = static_cast<std::size_t>(
+        maximumResultsBox->currentData().toInt()
+    );
+
+    switch (regulationFilterBox->currentIndex())
+    {
+        case 1:
+            settings.regulationFilter = RegulationFilter::Upregulated;
+            break;
+
+        case 2:
+            settings.regulationFilter = RegulationFilter::Downregulated;
+            break;
+
+        case 3:
+            settings.regulationFilter = RegulationFilter::NotSignificant;
+            break;
+
+        default:
+            settings.regulationFilter = RegulationFilter::All;
+            break;
+    }
+
+    return settings;
+}
+
+void MainWindow::applyExpressionFilters()
+{
+    if (expressionResults.empty())
+    {
+        return;
+    }
+
+    ExpressionFilterSettings settings =
+        getCurrentExpressionFilterSettings();
+
+    ExpressionFilterEngine filterEngine;
+    classifiedExpressionResults = filterEngine.classify(
+        expressionResults,
+        settings
+    );
+    filteredExpressionResults = filterEngine.filter(
+        classifiedExpressionResults,
+        settings
+    );
+
+    populateExpressionResultsTable();
+
+    expressionFilterSummaryLabel->setText(
+        QString(
+            "Showing %1 of %2 genes | Adjusted p <= %3 | "
+            "Minimum |log2 FC| = %4"
+        )
+        .arg(static_cast<qulonglong>(filteredExpressionResults.size()))
+        .arg(static_cast<qulonglong>(classifiedExpressionResults.size()))
+        .arg(settings.adjustedPValueThreshold, 0, 'g', 5)
+        .arg(settings.minimumAbsoluteLog2FoldChange, 0, 'f', 2)
+    );
+
+    expressionFilterSummaryLabel->setStyleSheet(
+        filteredExpressionResults.empty()
+            ? "font-weight: bold; color: #B26A00;"
+            : "font-weight: bold; color: #2D6A4F;"
+    );
+}
+
+void MainWindow::resetExpressionFilters()
+{
+    geneSearchBox->clear();
+    regulationFilterBox->setCurrentIndex(0);
+    adjustedPThresholdBox->setValue(0.05);
+    foldChangeThresholdBox->setValue(1.0);
+    maximumResultsBox->setCurrentIndex(0);
+
+    applyExpressionFilters();
+}
+
 void MainWindow::populateExpressionResultsTable()
 {
     expressionResultsTable->setSortingEnabled(false);
     expressionResultsTable->clearContents();
     expressionResultsTable->setRowCount(
-        static_cast<int>(expressionResults.size())
+        static_cast<int>(filteredExpressionResults.size())
     );
 
     std::size_t upregulatedCount = 0;
     std::size_t downregulatedCount = 0;
 
-    for (std::size_t row = 0; row < expressionResults.size(); ++row)
+    for (const DifferentialExpressionResult& result :
+         classifiedExpressionResults)
+    {
+        if (result.getRegulationStatus() == RegulationStatus::Upregulated)
+        {
+            ++upregulatedCount;
+        }
+        else if (result.getRegulationStatus()
+                 == RegulationStatus::Downregulated)
+        {
+            ++downregulatedCount;
+        }
+    }
+
+    for (std::size_t row = 0;
+         row < filteredExpressionResults.size();
+         ++row)
     {
         const DifferentialExpressionResult& result =
-            expressionResults.at(row);
+            filteredExpressionResults.at(row);
 
         QTableWidgetItem* geneItem = new QTableWidgetItem(
             QString::fromStdString(result.getGeneName())
@@ -2493,13 +2727,11 @@ void MainWindow::populateExpressionResultsTable()
         {
             regulationItem->setBackground(QColor("#CDEFD8"));
             regulationItem->setForeground(QColor("#176B35"));
-            ++upregulatedCount;
         }
         else if (result.getRegulationStatus() == RegulationStatus::Downregulated)
         {
             regulationItem->setBackground(QColor("#FFD6D6"));
             regulationItem->setForeground(QColor("#9C1C1C"));
-            ++downregulatedCount;
         }
         else
         {
@@ -2540,7 +2772,7 @@ void MainWindow::populateExpressionResultsTable()
             "%1 genes analyzed | %2 significant | "
             "%3 upregulated | %4 downregulated | Normalization: %5"
         )
-        .arg(static_cast<qulonglong>(expressionResults.size()))
+        .arg(static_cast<qulonglong>(classifiedExpressionResults.size()))
         .arg(static_cast<qulonglong>(significantCount))
         .arg(static_cast<qulonglong>(upregulatedCount))
         .arg(static_cast<qulonglong>(downregulatedCount))
@@ -2557,7 +2789,7 @@ void MainWindow::populateExpressionResultsTable()
 void MainWindow::exportExpressionTables()
 {
     if (!expressionDataset
-        || expressionResults.empty()
+        || filteredExpressionResults.empty()
         || currentNormalizedExpressionValues.empty())
     {
         QMessageBox::warning(
@@ -2589,7 +2821,7 @@ void MainWindow::exportExpressionTables()
             exportDirectory
                 .filePath("differential_expression_results.csv")
                 .toStdString(),
-            expressionResults
+            filteredExpressionResults
         );
 
         exporter.exportNormalizedMatrixCSV(
@@ -2606,9 +2838,11 @@ void MainWindow::exportExpressionTables()
                 .filePath("analysis_summary.txt")
                 .toStdString(),
             *expressionDataset,
-            expressionResults,
+            classifiedExpressionResults,
             sampleGrouping,
-            normalizationMethodBox->currentText().toStdString()
+            normalizationMethodBox->currentText().toStdString(),
+            adjustedPThresholdBox->value(),
+            foldChangeThresholdBox->value()
         );
 
         QMessageBox::information(

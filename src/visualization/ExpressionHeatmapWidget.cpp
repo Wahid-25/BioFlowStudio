@@ -129,10 +129,19 @@ void ExpressionHeatmapWidget::setData(
         resultByGene[result.getGeneName()] = &result;
     }
 
-    std::vector<std::size_t> geneIndices(geneCount);
-    std::iota(geneIndices.begin(), geneIndices.end(), 0);
-
     const auto& geneNames = dataset.getGeneNames();
+
+    std::vector<std::size_t> geneIndices;
+    geneIndices.reserve(geneCount);
+
+    for (std::size_t gene = 0; gene < geneCount; ++gene)
+    {
+        if (resultByGene.find(geneNames.at(gene))
+            != resultByGene.end())
+        {
+            geneIndices.push_back(gene);
+        }
+    }
 
     std::stable_sort(
         geneIndices.begin(),

@@ -21,9 +21,6 @@
 
 namespace
 {
-constexpr double AdjustedPValueThreshold = 0.05;
-constexpr double FoldChangeThreshold = 1.0;
-
 double significanceScore(double adjustedPValue)
 {
     constexpr double minimumPValue = 1.0e-300;
@@ -109,7 +106,9 @@ void VolcanoPlotWidget::clearPlot()
 }
 
 void VolcanoPlotWidget::setResults(
-    const std::vector<DifferentialExpressionResult>& results
+    const std::vector<DifferentialExpressionResult>& results,
+    double adjustedPValueThreshold,
+    double foldChangeThreshold
 )
 {
     if (results.empty())
@@ -231,23 +230,23 @@ void VolcanoPlotWidget::setResults(
     thresholdPen.setWidth(2);
 
     QLineSeries* leftThreshold = new QLineSeries;
-    leftThreshold->append(-FoldChangeThreshold, 0.0);
-    leftThreshold->append(-FoldChangeThreshold, yLimit);
+    leftThreshold->append(-foldChangeThreshold, 0.0);
+    leftThreshold->append(-foldChangeThreshold, yLimit);
     leftThreshold->setPen(thresholdPen);
 
     QLineSeries* rightThreshold = new QLineSeries;
-    rightThreshold->append(FoldChangeThreshold, 0.0);
-    rightThreshold->append(FoldChangeThreshold, yLimit);
+    rightThreshold->append(foldChangeThreshold, 0.0);
+    rightThreshold->append(foldChangeThreshold, yLimit);
     rightThreshold->setPen(thresholdPen);
 
     QLineSeries* significanceThreshold = new QLineSeries;
     significanceThreshold->append(
         -xLimit,
-        significanceScore(AdjustedPValueThreshold)
+        significanceScore(adjustedPValueThreshold)
     );
     significanceThreshold->append(
         xLimit,
-        significanceScore(AdjustedPValueThreshold)
+        significanceScore(adjustedPValueThreshold)
     );
     significanceThreshold->setPen(thresholdPen);
 

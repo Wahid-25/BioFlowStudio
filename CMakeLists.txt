@@ -42,6 +42,8 @@ qt_add_executable(BioFlowStudio
     src/gene_expression/DifferentialExpressionResult.cpp
     src/gene_expression/DifferentialExpressionResult.h
     src/gene_expression/DifferentialExpressionAnalyzer.h
+    src/gene_expression/ExpressionFilter.cpp
+    src/gene_expression/ExpressionFilter.h
     src/phylogenetics/FastaParser.cpp
     src/phylogenetics/FastaParser.h
     src/gene_expression/StatisticsUtilities.cpp

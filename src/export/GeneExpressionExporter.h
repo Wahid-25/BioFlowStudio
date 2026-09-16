@@ -27,7 +27,9 @@ public:
         const ExpressionDataset& dataset,
         const std::vector<DifferentialExpressionResult>& results,
         const SampleGrouping& grouping,
-        const std::string& normalizationName
+        const std::string& normalizationName,
+        double adjustedPValueThreshold,
+        double minimumAbsoluteLog2FoldChange
     ) const;
 
 private:

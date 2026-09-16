@@ -10,6 +10,7 @@
 #include "core/Project.h"
 #include "gene_expression/DifferentialExpressionResult.h"
 #include "gene_expression/ExpressionDataset.h"
+#include "gene_expression/ExpressionFilter.h"
 #include "gene_expression/SampleGrouping.h"
 #include "phylogenetics/DistanceMatrix.h"
 #include "phylogenetics/Sequence.h"
@@ -18,6 +19,8 @@
 class QLabel;
 class QListWidget;
 class QComboBox;
+class QDoubleSpinBox;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QStackedWidget;
@@ -84,9 +87,17 @@ private:
     std::vector<QComboBox*> sampleGroupBoxes;
 
     std::vector<DifferentialExpressionResult> expressionResults;
+    std::vector<DifferentialExpressionResult> classifiedExpressionResults;
+    std::vector<DifferentialExpressionResult> filteredExpressionResults;
     std::vector<std::vector<double>> currentNormalizedExpressionValues;
     QLabel* expressionResultsSummaryLabel = nullptr;
+    QLabel* expressionFilterSummaryLabel = nullptr;
     QTableWidget* expressionResultsTable = nullptr;
+    QLineEdit* geneSearchBox = nullptr;
+    QComboBox* regulationFilterBox = nullptr;
+    QDoubleSpinBox* adjustedPThresholdBox = nullptr;
+    QDoubleSpinBox* foldChangeThresholdBox = nullptr;
+    QComboBox* maximumResultsBox = nullptr;
     VolcanoPlotWidget* volcanoPlotWidget = nullptr;
     ExpressionHeatmapWidget* expressionHeatmapWidget = nullptr;
     QLabel* expressionHeatmapSummaryLabel = nullptr;
@@ -141,6 +152,11 @@ private:
 
     void populateSampleGroupingTable();
     void populateExpressionResultsTable();
+    void applyExpressionFilters();
+    void resetExpressionFilters();
+
+    ExpressionFilterSettings
+    getCurrentExpressionFilterSettings() const;
 
     std::unique_ptr<PairwiseAligner> createAligner(
         const QString& methodName
