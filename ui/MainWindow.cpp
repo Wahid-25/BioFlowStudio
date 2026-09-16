@@ -35,6 +35,7 @@
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
 #include "visualization/PhylogeneticTreeWidget.h"
+#include "visualization/ExpressionHeatmapWidget.h"
 #include "visualization/VolcanoPlotWidget.h"
 
 namespace
@@ -117,6 +118,7 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionConfigurationPage());
     pages->addWidget(createExpressionResultsPage());
     pages->addWidget(createExpressionVolcanoPage());
+    pages->addWidget(createExpressionHeatmapPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -883,11 +885,20 @@ QWidget* MainWindow::createExpressionResultsPage()
     );
     volcanoButton->setMinimumHeight(46);
 
+    QPushButton* heatmapButton = new QPushButton(
+        "Open Gene-Expression Heatmap"
+    );
+    heatmapButton->setMinimumHeight(46);
+
+    QHBoxLayout* visualizationButtonLayout = new QHBoxLayout;
+    visualizationButtonLayout->addWidget(volcanoButton);
+    visualizationButtonLayout->addWidget(heatmapButton);
+
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(expressionResultsSummaryLabel);
     layout->addWidget(expressionResultsTable, 1);
-    layout->addWidget(volcanoButton);
+    layout->addLayout(visualizationButtonLayout);
     layout->addWidget(backButton);
 
     connect(
@@ -895,6 +906,13 @@ QWidget* MainWindow::createExpressionResultsPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openExpressionVolcanoPage
+    );
+
+    connect(
+        heatmapButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionHeatmapPage
     );
 
     connect(
@@ -955,6 +973,84 @@ QWidget* MainWindow::createExpressionVolcanoPage()
             volcanoPlotWidget->chart()->zoomReset();
         }
     );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToExpressionResults
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionHeatmapPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(25, 18, 25, 18);
+    layout->setSpacing(9);
+
+    QLabel* title = createPageTitle(
+        "Gene-Expression Heatmap"
+    );
+
+    QLabel* description = createDescription(
+        "The most statistically important genes are ordered by adjusted "
+        "p-value. Colours are calculated independently for each gene so "
+        "that its relative expression pattern can be compared across samples."
+    );
+
+    expressionHeatmapSummaryLabel = new QLabel(
+        "Run an analysis to generate a heatmap."
+    );
+    expressionHeatmapSummaryLabel->setAlignment(Qt::AlignCenter);
+    expressionHeatmapSummaryLabel->setWordWrap(true);
+    expressionHeatmapSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    QHBoxLayout* legendLayout = new QHBoxLayout;
+    legendLayout->addStretch();
+
+    QLabel* lowLabel = new QLabel("  Lower expression  ");
+    lowLabel->setAlignment(Qt::AlignCenter);
+    lowLabel->setStyleSheet(
+        "background-color: #2166AC; color: white; padding: 6px;"
+    );
+
+    QLabel* averageLabel = new QLabel("  Gene average  ");
+    averageLabel->setAlignment(Qt::AlignCenter);
+    averageLabel->setStyleSheet(
+        "background-color: #FAFAFA; color: #203040; "
+        "border: 1px solid #D7E0E8; padding: 6px;"
+    );
+
+    QLabel* highLabel = new QLabel("  Higher expression  ");
+    highLabel->setAlignment(Qt::AlignCenter);
+    highLabel->setStyleSheet(
+        "background-color: #B2182B; color: white; padding: 6px;"
+    );
+
+    legendLayout->addWidget(lowLabel);
+    legendLayout->addWidget(averageLabel);
+    legendLayout->addWidget(highLabel);
+    legendLayout->addStretch();
+
+    expressionHeatmapWidget = new ExpressionHeatmapWidget;
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Differential Expression Results"
+    );
+    backButton->setMinimumHeight(44);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(expressionHeatmapSummaryLabel);
+    layout->addLayout(legendLayout);
+    layout->addWidget(expressionHeatmapWidget, 1);
+    layout->addWidget(backButton);
 
     connect(
         backButton,
@@ -1047,6 +1143,67 @@ void MainWindow::openExpressionVolcanoPage()
 
     volcanoPlotWidget->setResults(expressionResults);
     pages->setCurrentIndex(ExpressionVolcanoPage);
+}
+
+void MainWindow::openExpressionHeatmapPage()
+{
+    if (!expressionDataset
+        || expressionResults.empty()
+        || currentNormalizedExpressionValues.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Analysis Results",
+            "Run differential expression analysis before opening "
+            "the expression heatmap."
+        );
+        return;
+    }
+
+    try
+    {
+        constexpr std::size_t maximumDisplayedGenes = 50;
+
+        expressionHeatmapWidget->setData(
+            *expressionDataset,
+            currentNormalizedExpressionValues,
+            expressionResults,
+            sampleGrouping,
+            maximumDisplayedGenes
+        );
+
+        std::size_t displayedGenes = std::min(
+            maximumDisplayedGenes,
+            expressionDataset->getGeneCount()
+        );
+
+        expressionHeatmapSummaryLabel->setText(
+            QString(
+                "Displaying %1 of %2 genes across %3 samples | "
+                "Cell values are row Z-scores"
+            )
+            .arg(static_cast<qulonglong>(displayedGenes))
+            .arg(static_cast<qulonglong>(
+                expressionDataset->getGeneCount()
+            ))
+            .arg(static_cast<qulonglong>(
+                expressionDataset->getSampleCount()
+            ))
+        );
+        expressionHeatmapSummaryLabel->setStyleSheet(
+            "font-weight: bold; color: #2D6A4F;"
+        );
+
+        pages->setCurrentIndex(ExpressionHeatmapPage);
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Heatmap Error",
+            QString::fromStdString(error.what())
+        );
+    }
 }
 
 void MainWindow::returnToDashboard()
@@ -1684,6 +1841,7 @@ void MainWindow::importExpressionFile()
             expressionDataset->getSampleNames()
         );
         expressionResults.clear();
+        currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(true);
 
         selectedExpressionFile = filePath;
@@ -1852,6 +2010,7 @@ void MainWindow::importExpressionFile()
         expressionDataset.reset();
         sampleGrouping.clear();
         expressionResults.clear();
+        currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(false);
 
         expressionPreviewTable->clear();
@@ -2063,13 +2222,13 @@ void MainWindow::runDifferentialExpressionAnalysis()
             normalizer = std::make_unique<ZScoreNormalization>();
         }
 
-        std::vector<std::vector<double>> normalizedValues =
+        currentNormalizedExpressionValues =
             normalizer->normalize(*expressionDataset);
 
         WelchTTestAnalyzer analyzer;
         expressionResults = analyzer.analyze(
             *expressionDataset,
-            normalizedValues,
+            currentNormalizedExpressionValues,
             sampleGrouping
         );
 

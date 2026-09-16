@@ -25,6 +25,7 @@ class QTableWidget;
 class QWidget;
 
 class PairwiseAligner;
+class ExpressionHeatmapWidget;
 class PhylogeneticTreeWidget;
 class VolcanoPlotWidget;
 
@@ -42,6 +43,7 @@ private:
     static constexpr int ExpressionConfigurationPage = 5;
     static constexpr int ExpressionResultsPage = 6;
     static constexpr int ExpressionVolcanoPage = 7;
+    static constexpr int ExpressionHeatmapPage = 8;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -80,9 +82,12 @@ private:
     std::vector<QComboBox*> sampleGroupBoxes;
 
     std::vector<DifferentialExpressionResult> expressionResults;
+    std::vector<std::vector<double>> currentNormalizedExpressionValues;
     QLabel* expressionResultsSummaryLabel = nullptr;
     QTableWidget* expressionResultsTable = nullptr;
     VolcanoPlotWidget* volcanoPlotWidget = nullptr;
+    ExpressionHeatmapWidget* expressionHeatmapWidget = nullptr;
+    QLabel* expressionHeatmapSummaryLabel = nullptr;
 
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
@@ -92,6 +97,7 @@ private:
     QWidget* createExpressionConfigurationPage();
     QWidget* createExpressionResultsPage();
     QWidget* createExpressionVolcanoPage();
+    QWidget* createExpressionHeatmapPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -100,6 +106,7 @@ private:
     void openPhylogeneticTreePage();
     void openExpressionConfigurationPage();
     void openExpressionVolcanoPage();
+    void openExpressionHeatmapPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();

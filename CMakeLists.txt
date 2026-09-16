@@ -14,6 +14,8 @@ qt_add_executable(BioFlowStudio
     src/phylogenetics/UPGMATree.cpp
     src/visualization/PhylogeneticTreeWidget.cpp
     src/visualization/PhylogeneticTreeWidget.h
+    src/visualization/ExpressionHeatmapWidget.cpp
+    src/visualization/ExpressionHeatmapWidget.h
     src/visualization/VolcanoPlotWidget.cpp
     src/visualization/VolcanoPlotWidget.h
     src/phylogenetics/UPGMATree.h
