@@ -5,7 +5,7 @@ project(BioFlowStudio VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Charts)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Charts)
 
 qt_standard_project_setup()
 
@@ -122,3 +122,61 @@ target_link_libraries(BioFlowStudio PRIVATE
 set_target_properties(BioFlowStudio PROPERTIES
     WIN32_EXECUTABLE TRUE
 )
+
+include(CTest)
+
+if(BUILD_TESTING)
+    qt_add_executable(BioFlowStudioTests
+        tests/TestRunner.cpp
+
+        src/core/Dataset.cpp
+        src/core/Dataset.h
+
+        src/phylogenetics/Sequence.cpp
+        src/phylogenetics/Sequence.h
+        src/phylogenetics/FastaParser.cpp
+        src/phylogenetics/FastaParser.h
+        src/phylogenetics/PairwiseAligner.cpp
+        src/phylogenetics/PairwiseAligner.h
+        src/phylogenetics/DistanceMatrix.cpp
+        src/phylogenetics/DistanceMatrix.h
+
+        src/gene_expression/ExpressionDataset.cpp
+        src/gene_expression/ExpressionDataset.h
+        src/gene_expression/ExpressionParser.cpp
+        src/gene_expression/ExpressionParser.h
+        src/gene_expression/NormalizationStrategy.cpp
+        src/gene_expression/NormalizationStrategy.h
+        src/gene_expression/SampleGrouping.cpp
+        src/gene_expression/SampleGrouping.h
+        src/gene_expression/DifferentialExpressionResult.cpp
+        src/gene_expression/DifferentialExpressionResult.h
+        src/gene_expression/DifferentialExpressionAnalyzer.h
+        src/gene_expression/StatisticsUtilities.cpp
+        src/gene_expression/StatisticsUtilities.h
+        src/gene_expression/WelchTTestAnalyzer.cpp
+        src/gene_expression/WelchTTestAnalyzer.h
+
+        src/session/ProjectSession.cpp
+        src/session/ProjectSession.h
+        src/session/ProjectSerializer.cpp
+        src/session/ProjectSerializer.h
+    )
+
+    target_include_directories(BioFlowStudioTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/phylogenetics
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/gene_expression
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/session
+    )
+
+    target_link_libraries(BioFlowStudioTests PRIVATE
+        Qt6::Core
+    )
+
+    add_test(
+        NAME BioFlowStudioCoreTests
+        COMMAND BioFlowStudioTests
+    )
+endif()
