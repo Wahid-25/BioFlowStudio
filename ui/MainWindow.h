@@ -11,6 +11,7 @@
 #include "gene_expression/DifferentialExpressionResult.h"
 #include "gene_expression/ExpressionDataset.h"
 #include "gene_expression/ExpressionFilter.h"
+#include "gene_expression/EnrichmentResult.h"
 #include "gene_expression/SampleGrouping.h"
 #include "phylogenetics/DistanceMatrix.h"
 #include "phylogenetics/Sequence.h"
@@ -30,6 +31,7 @@ class QWidget;
 
 class PairwiseAligner;
 class ExpressionHeatmapWidget;
+class EnrichmentBarChartWidget;
 class PCAPlotWidget;
 class PhylogeneticTreeWidget;
 class VolcanoPlotWidget;
@@ -52,6 +54,7 @@ private:
     static constexpr int ExpressionPCAPage = 9;
     static constexpr int PhylogeneticQualityPage = 10;
     static constexpr int ExpressionQualityPage = 11;
+    static constexpr int ExpressionEnrichmentPage = 12;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -109,6 +112,16 @@ private:
     PCAPlotWidget* pcaPlotWidget = nullptr;
     QLabel* pcaSummaryLabel = nullptr;
 
+    std::vector<EnrichmentResult> enrichmentResults;
+    std::vector<EnrichmentResult> filteredEnrichmentResults;
+    QTableWidget* enrichmentResultsTable = nullptr;
+    QLabel* enrichmentSummaryLabel = nullptr;
+    QLineEdit* pathwaySearchBox = nullptr;
+    QComboBox* pathwayCategoryBox = nullptr;
+    QDoubleSpinBox* enrichmentPThresholdBox = nullptr;
+    QComboBox* maximumPathwaysBox = nullptr;
+    EnrichmentBarChartWidget* enrichmentBarChart = nullptr;
+
     QTableWidget* phylogeneticQualityTable = nullptr;
     QLabel* phylogeneticQualitySummaryLabel = nullptr;
     QTableWidget* expressionQualityTable = nullptr;
@@ -126,6 +139,7 @@ private:
     QWidget* createExpressionPCAPage();
     QWidget* createPhylogeneticQualityPage();
     QWidget* createExpressionQualityPage();
+    QWidget* createExpressionEnrichmentPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -138,6 +152,7 @@ private:
     void openExpressionPCAPage();
     void openPhylogeneticQualityPage();
     void openExpressionQualityPage();
+    void openExpressionEnrichmentPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();
@@ -150,10 +165,12 @@ private:
     void generateDistanceMatrix();
     void generatePhylogeneticTree();
     void runDifferentialExpressionAnalysis();
+    void runFunctionalEnrichmentAnalysis();
 
     void exportMatrixResults();
     void exportTreeResults();
     void exportExpressionTables();
+    void exportEnrichmentResults();
     void exportWidgetImage(
         QWidget* widget,
         const QString& suggestedFileName,
@@ -173,6 +190,9 @@ private:
     );
     void applyExpressionFilters();
     void resetExpressionFilters();
+    void applyEnrichmentFilters();
+    void resetEnrichmentFilters();
+    void populateEnrichmentResultsTable();
 
     ExpressionFilterSettings
     getCurrentExpressionFilterSettings() const;

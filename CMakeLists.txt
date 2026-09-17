@@ -20,6 +20,8 @@ qt_add_executable(BioFlowStudio
     src/visualization/PCAPlotWidget.h
     src/visualization/VolcanoPlotWidget.cpp
     src/visualization/VolcanoPlotWidget.h
+    src/visualization/EnrichmentBarChartWidget.cpp
+    src/visualization/EnrichmentBarChartWidget.h
     src/phylogenetics/UPGMATree.h
     src/export/PhylogeneticExporter.cpp
     src/export/PhylogeneticExporter.h
@@ -44,6 +46,13 @@ qt_add_executable(BioFlowStudio
     src/gene_expression/DifferentialExpressionAnalyzer.h
     src/gene_expression/ExpressionFilter.cpp
     src/gene_expression/ExpressionFilter.h
+    src/gene_expression/EnrichmentResult.cpp
+    src/gene_expression/EnrichmentResult.h
+    src/gene_expression/PathwayDatabase.cpp
+    src/gene_expression/PathwayDatabase.h
+    src/gene_expression/EnrichmentAnalyzer.h
+    src/gene_expression/HypergeometricEnrichmentAnalyzer.cpp
+    src/gene_expression/HypergeometricEnrichmentAnalyzer.h
     src/phylogenetics/FastaParser.cpp
     src/phylogenetics/FastaParser.h
     src/gene_expression/StatisticsUtilities.cpp

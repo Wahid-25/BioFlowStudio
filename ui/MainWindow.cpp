@@ -27,6 +27,8 @@
 
 #include <algorithm>
 #include <exception>
+#include <fstream>
+#include <iomanip>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -36,6 +38,8 @@
 #include "gene_expression/NormalizationStrategy.h"
 #include "gene_expression/PCAAnalyzer.h"
 #include "gene_expression/ExpressionParser.h"
+#include "gene_expression/HypergeometricEnrichmentAnalyzer.h"
+#include "gene_expression/PathwayDatabase.h"
 #include "gene_expression/WelchTTestAnalyzer.h"
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
@@ -43,6 +47,7 @@
 #include "quality/SequenceQualityAnalyzer.h"
 #include "visualization/PhylogeneticTreeWidget.h"
 #include "visualization/ExpressionHeatmapWidget.h"
+#include "visualization/EnrichmentBarChartWidget.h"
 #include "visualization/PCAPlotWidget.h"
 #include "visualization/VolcanoPlotWidget.h"
 
@@ -130,6 +135,7 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionPCAPage());
     pages->addWidget(createPhylogeneticQualityPage());
     pages->addWidget(createExpressionQualityPage());
+    pages->addWidget(createExpressionEnrichmentPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -1020,6 +1026,11 @@ QWidget* MainWindow::createExpressionResultsPage()
     visualizationButtonLayout->addWidget(heatmapButton);
     visualizationButtonLayout->addWidget(pcaButton);
 
+    QPushButton* enrichmentButton = new QPushButton(
+        "Open Functional Enrichment and Pathway Analysis"
+    );
+    enrichmentButton->setMinimumHeight(46);
+
     QPushButton* exportTablesButton = new QPushButton(
         "Export Analysis Tables and Summary"
     );
@@ -1031,6 +1042,7 @@ QWidget* MainWindow::createExpressionResultsPage()
     layout->addLayout(filterLayout);
     layout->addWidget(expressionResultsTable, 1);
     layout->addLayout(visualizationButtonLayout);
+    layout->addWidget(enrichmentButton);
     layout->addWidget(exportTablesButton);
     layout->addWidget(backButton);
 
@@ -1095,6 +1107,13 @@ QWidget* MainWindow::createExpressionResultsPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openExpressionPCAPage
+    );
+
+    connect(
+        enrichmentButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionEnrichmentPage
     );
 
     connect(
@@ -1505,6 +1524,211 @@ QWidget* MainWindow::createExpressionQualityPage()
     return page;
 }
 
+QWidget* MainWindow::createExpressionEnrichmentPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(28, 18, 28, 18);
+    layout->setSpacing(8);
+
+    QLabel* title = createPageTitle(
+        "Functional Enrichment and Pathway Analysis"
+    );
+
+    QLabel* description = createDescription(
+        "Significant genes are tested for overrepresentation in the "
+        "BioFlow curated teaching pathway database using a hypergeometric "
+        "test and Benjamini-Hochberg correction."
+    );
+
+    enrichmentSummaryLabel = new QLabel(
+        "Run differential-expression analysis to identify enriched pathways."
+    );
+    enrichmentSummaryLabel->setAlignment(Qt::AlignCenter);
+    enrichmentSummaryLabel->setWordWrap(true);
+    enrichmentSummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    QGridLayout* filterLayout = new QGridLayout;
+    filterLayout->setHorizontalSpacing(10);
+
+    QLabel* searchLabel = new QLabel("Search pathway:");
+    searchLabel->setStyleSheet("font-weight: bold;");
+
+    pathwaySearchBox = new QLineEdit;
+    pathwaySearchBox->setPlaceholderText("Example: cell cycle");
+    pathwaySearchBox->setClearButtonEnabled(true);
+
+    QLabel* categoryLabel = new QLabel("Category:");
+    categoryLabel->setStyleSheet("font-weight: bold;");
+
+    pathwayCategoryBox = new QComboBox;
+    pathwayCategoryBox->addItems(
+        {
+            "All categories",
+            "GO Biological Process",
+            "Signalling Pathway",
+            "Stress Response",
+            "Disease Process"
+        }
+    );
+
+    QLabel* thresholdLabel = new QLabel("Adjusted p-value <=");
+    thresholdLabel->setStyleSheet("font-weight: bold;");
+
+    enrichmentPThresholdBox = new QDoubleSpinBox;
+    enrichmentPThresholdBox->setRange(0.000001, 1.0);
+    enrichmentPThresholdBox->setDecimals(6);
+    enrichmentPThresholdBox->setSingleStep(0.01);
+    enrichmentPThresholdBox->setValue(1.0);
+
+    QLabel* maximumLabel = new QLabel("Display:");
+    maximumLabel->setStyleSheet("font-weight: bold;");
+
+    maximumPathwaysBox = new QComboBox;
+    maximumPathwaysBox->addItem("All pathways", 0);
+    maximumPathwaysBox->addItem("Top 5", 5);
+    maximumPathwaysBox->addItem("Top 10", 10);
+    maximumPathwaysBox->addItem("Top 20", 20);
+
+    QPushButton* resetButton = new QPushButton("Reset Filters");
+    resetButton->setMinimumHeight(34);
+
+    filterLayout->addWidget(searchLabel, 0, 0);
+    filterLayout->addWidget(pathwaySearchBox, 0, 1);
+    filterLayout->addWidget(categoryLabel, 0, 2);
+    filterLayout->addWidget(pathwayCategoryBox, 0, 3);
+    filterLayout->addWidget(thresholdLabel, 1, 0);
+    filterLayout->addWidget(enrichmentPThresholdBox, 1, 1);
+    filterLayout->addWidget(maximumLabel, 1, 2);
+    filterLayout->addWidget(maximumPathwaysBox, 1, 3);
+    filterLayout->addWidget(resetButton, 0, 4, 2, 1);
+
+    enrichmentResultsTable = new QTableWidget;
+    enrichmentResultsTable->setColumnCount(8);
+    enrichmentResultsTable->setHorizontalHeaderLabels(
+        {
+            "Pathway ID",
+            "Pathway",
+            "Category",
+            "Overlap",
+            "Fold Enrichment",
+            "P-value",
+            "Adjusted P-value",
+            "Contributing Genes"
+        }
+    );
+    enrichmentResultsTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+    enrichmentResultsTable->setSelectionBehavior(
+        QAbstractItemView::SelectRows
+    );
+    enrichmentResultsTable->setAlternatingRowColors(true);
+    enrichmentResultsTable->verticalHeader()->setVisible(false);
+    enrichmentResultsTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::ResizeToContents
+    );
+    enrichmentResultsTable->horizontalHeader()->setStretchLastSection(true);
+
+    enrichmentBarChart = new EnrichmentBarChartWidget;
+
+    QPushButton* exportButton = new QPushButton(
+        "Export Enrichment Results"
+    );
+    exportButton->setMinimumHeight(42);
+
+    QPushButton* exportChartButton = new QPushButton(
+        "Export Pathway Chart PNG"
+    );
+    exportChartButton->setMinimumHeight(42);
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Differential Expression Results"
+    );
+    backButton->setMinimumHeight(42);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(exportButton);
+    buttonLayout->addWidget(exportChartButton);
+    buttonLayout->addWidget(backButton);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(enrichmentSummaryLabel);
+    layout->addLayout(filterLayout);
+    layout->addWidget(enrichmentResultsTable, 3);
+    layout->addWidget(enrichmentBarChart, 2);
+    layout->addLayout(buttonLayout);
+
+    connect(
+        pathwaySearchBox,
+        &QLineEdit::textChanged,
+        this,
+        [this]() { applyEnrichmentFilters(); }
+    );
+
+    connect(
+        pathwayCategoryBox,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this]() { applyEnrichmentFilters(); }
+    );
+
+    connect(
+        enrichmentPThresholdBox,
+        &QDoubleSpinBox::valueChanged,
+        this,
+        [this]() { applyEnrichmentFilters(); }
+    );
+
+    connect(
+        maximumPathwaysBox,
+        &QComboBox::currentIndexChanged,
+        this,
+        [this]() { applyEnrichmentFilters(); }
+    );
+
+    connect(
+        resetButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::resetEnrichmentFilters
+    );
+
+    connect(
+        exportButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::exportEnrichmentResults
+    );
+
+    connect(
+        exportChartButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                enrichmentBarChart,
+                "pathway_enrichment_chart.png",
+                "Export Pathway-Enrichment Chart"
+            );
+        }
+    );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToExpressionResults
+    );
+
+    return page;
+}
+
 void MainWindow::selectPhylogeneticWorkspace()
 {
     currentProject.setWorkspaceType(
@@ -1772,6 +1996,244 @@ void MainWindow::openExpressionQualityPage()
     );
 
     pages->setCurrentIndex(ExpressionQualityPage);
+}
+
+void MainWindow::openExpressionEnrichmentPage()
+{
+    if (!expressionDataset || classifiedExpressionResults.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Differential Expression Results",
+            "Run differential-expression analysis before pathway enrichment."
+        );
+        return;
+    }
+
+    runFunctionalEnrichmentAnalysis();
+}
+
+void MainWindow::runFunctionalEnrichmentAnalysis()
+{
+    std::vector<std::string> significantGenes;
+
+    for (const DifferentialExpressionResult& result :
+         classifiedExpressionResults)
+    {
+        if (result.getRegulationStatus()
+            != RegulationStatus::NotSignificant)
+        {
+            significantGenes.push_back(result.getGeneName());
+        }
+    }
+
+    if (significantGenes.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Significant Genes",
+            "No genes meet the current differential-expression thresholds. "
+            "Adjust the p-value or fold-change filters and try again."
+        );
+        return;
+    }
+
+    try
+    {
+        BuiltInPathwayDatabase database;
+        HypergeometricEnrichmentAnalyzer analyzer;
+
+        enrichmentResults = analyzer.analyze(
+            significantGenes,
+            expressionDataset->getGeneNames(),
+            database.getPathways()
+        );
+
+        if (enrichmentResults.empty())
+        {
+            QMessageBox::information(
+                this,
+                "No Pathway Matches",
+                "The significant genes did not overlap the built-in teaching "
+                "pathway database. The analysis itself completed correctly."
+            );
+        }
+
+        resetEnrichmentFilters();
+        pages->setCurrentIndex(ExpressionEnrichmentPage);
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Enrichment Analysis Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::applyEnrichmentFilters()
+{
+    if (enrichmentResultsTable == nullptr)
+    {
+        return;
+    }
+
+    filteredEnrichmentResults.clear();
+
+    QString query = pathwaySearchBox->text().trimmed();
+    QString category = pathwayCategoryBox->currentText();
+    double maximumAdjustedP = enrichmentPThresholdBox->value();
+    std::size_t maximumResults = static_cast<std::size_t>(
+        maximumPathwaysBox->currentData().toInt()
+    );
+
+    for (const EnrichmentResult& result : enrichmentResults)
+    {
+        QString pathwayName = QString::fromStdString(
+            result.getPathwayName()
+        );
+        QString pathwayId = QString::fromStdString(
+            result.getPathwayId()
+        );
+        QString geneList = QString::fromStdString(
+            result.getOverlappingGeneList()
+        );
+
+        bool matchesQuery = query.isEmpty()
+            || pathwayName.contains(query, Qt::CaseInsensitive)
+            || pathwayId.contains(query, Qt::CaseInsensitive)
+            || geneList.contains(query, Qt::CaseInsensitive);
+
+        bool matchesCategory = category == "All categories"
+            || QString::fromStdString(result.getCategory()) == category;
+
+        if (matchesQuery
+            && matchesCategory
+            && result.getAdjustedPValue() <= maximumAdjustedP)
+        {
+            filteredEnrichmentResults.push_back(result);
+        }
+    }
+
+    if (maximumResults > 0
+        && filteredEnrichmentResults.size() > maximumResults)
+    {
+        filteredEnrichmentResults.erase(
+            filteredEnrichmentResults.begin()
+                + static_cast<std::ptrdiff_t>(maximumResults),
+            filteredEnrichmentResults.end()
+        );
+    }
+
+    populateEnrichmentResultsTable();
+}
+
+void MainWindow::resetEnrichmentFilters()
+{
+    pathwaySearchBox->clear();
+    pathwayCategoryBox->setCurrentIndex(0);
+    enrichmentPThresholdBox->setValue(1.0);
+    maximumPathwaysBox->setCurrentIndex(0);
+
+    applyEnrichmentFilters();
+}
+
+void MainWindow::populateEnrichmentResultsTable()
+{
+    enrichmentResultsTable->setSortingEnabled(false);
+    enrichmentResultsTable->clearContents();
+    enrichmentResultsTable->setRowCount(
+        static_cast<int>(filteredEnrichmentResults.size())
+    );
+
+    for (std::size_t row = 0;
+         row < filteredEnrichmentResults.size();
+         ++row)
+    {
+        const EnrichmentResult& result =
+            filteredEnrichmentResults.at(row);
+        int tableRow = static_cast<int>(row);
+
+        QTableWidgetItem* pathwayItem = new QTableWidgetItem(
+            QString::fromStdString(result.getPathwayName())
+        );
+        pathwayItem->setTextAlignment(Qt::AlignCenter);
+
+        QTableWidgetItem* adjustedItem = new NumericTableWidgetItem(
+            result.getAdjustedPValue(), 7
+        );
+
+        if (result.getAdjustedPValue() <= 0.05)
+        {
+            adjustedItem->setBackground(QColor("#CDEFD8"));
+            adjustedItem->setForeground(QColor("#176B35"));
+        }
+
+        QTableWidgetItem* overlapItem = new QTableWidgetItem(
+            QString("%1 / %2")
+                .arg(static_cast<qulonglong>(result.getOverlapCount()))
+                .arg(static_cast<qulonglong>(result.getPathwayGeneCount()))
+        );
+        overlapItem->setTextAlignment(Qt::AlignCenter);
+
+        enrichmentResultsTable->setItem(
+            tableRow, 0,
+            new QTableWidgetItem(
+                QString::fromStdString(result.getPathwayId())
+            )
+        );
+        enrichmentResultsTable->setItem(tableRow, 1, pathwayItem);
+        enrichmentResultsTable->setItem(
+            tableRow, 2,
+            new QTableWidgetItem(
+                QString::fromStdString(result.getCategory())
+            )
+        );
+        enrichmentResultsTable->setItem(tableRow, 3, overlapItem);
+        enrichmentResultsTable->setItem(
+            tableRow, 4,
+            new NumericTableWidgetItem(result.getFoldEnrichment(), 6)
+        );
+        enrichmentResultsTable->setItem(
+            tableRow, 5,
+            new NumericTableWidgetItem(result.getPValue(), 7)
+        );
+        enrichmentResultsTable->setItem(tableRow, 6, adjustedItem);
+        enrichmentResultsTable->setItem(
+            tableRow, 7,
+            new QTableWidgetItem(
+                QString::fromStdString(result.getOverlappingGeneList())
+            )
+        );
+    }
+
+    enrichmentResultsTable->setSortingEnabled(true);
+    enrichmentResultsTable->sortItems(6, Qt::AscendingOrder);
+    enrichmentBarChart->setResults(filteredEnrichmentResults, 10);
+
+    std::size_t significantPathways = 0;
+
+    for (const EnrichmentResult& result : enrichmentResults)
+    {
+        significantPathways += result.getAdjustedPValue() <= 0.05 ? 1 : 0;
+    }
+
+    enrichmentSummaryLabel->setText(
+        QString(
+            "%1 pathway(s) tested | %2 significant | %3 currently shown | "
+            "Green adjusted p-values are significant"
+        )
+        .arg(static_cast<qulonglong>(enrichmentResults.size()))
+        .arg(static_cast<qulonglong>(significantPathways))
+        .arg(static_cast<qulonglong>(filteredEnrichmentResults.size()))
+    );
+
+    enrichmentSummaryLabel->setStyleSheet(
+        filteredEnrichmentResults.empty()
+            ? "font-weight: bold; color: #B26A00;"
+            : "font-weight: bold; color: #2D6A4F;"
+    );
 }
 
 void MainWindow::returnToDashboard()
@@ -2418,6 +2880,8 @@ void MainWindow::importExpressionFile()
         classifiedExpressionResults.clear();
         filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
+        enrichmentResults.clear();
+        filteredEnrichmentResults.clear();
         configureExpressionButton->setEnabled(true);
         expressionQualityButton->setEnabled(true);
 
@@ -2590,6 +3054,8 @@ void MainWindow::importExpressionFile()
         classifiedExpressionResults.clear();
         filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
+        enrichmentResults.clear();
+        filteredEnrichmentResults.clear();
         configureExpressionButton->setEnabled(false);
         expressionQualityButton->setEnabled(false);
 
@@ -2907,6 +3373,9 @@ void MainWindow::runDifferentialExpressionAnalysis()
             sampleGrouping
         );
 
+        enrichmentResults.clear();
+        filteredEnrichmentResults.clear();
+
         resetExpressionFilters();
         pages->setCurrentIndex(ExpressionResultsPage);
     }
@@ -3185,6 +3654,105 @@ void MainWindow::exportExpressionTables()
         QMessageBox::critical(
             this,
             "Expression Export Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::exportEnrichmentResults()
+{
+    if (filteredEnrichmentResults.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "Nothing to Export",
+            "No enrichment results match the current filters."
+        );
+        return;
+    }
+
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        "Export Functional Enrichment Results",
+        "functional_enrichment_results.csv",
+        "CSV Files (*.csv)"
+    );
+
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    if (!filePath.endsWith(".csv", Qt::CaseInsensitive))
+    {
+        filePath += ".csv";
+    }
+
+    try
+    {
+        std::ofstream output(filePath.toStdString());
+
+        if (!output.is_open())
+        {
+            throw std::runtime_error(
+                "Could not create the enrichment CSV file."
+            );
+        }
+
+        auto quoteCSV = [](const std::string& value)
+        {
+            std::string escaped;
+            escaped.reserve(value.size() + 2);
+            escaped.push_back('"');
+
+            for (char character : value)
+            {
+                if (character == '"')
+                {
+                    escaped.push_back('"');
+                }
+
+                escaped.push_back(character);
+            }
+
+            escaped.push_back('"');
+            return escaped;
+        };
+
+        output
+            << "Pathway ID,Pathway,Category,Overlap Count,"
+            << "Pathway Genes in Background,Fold Enrichment,P-value,"
+            << "Adjusted P-value,Contributing Genes\n";
+
+        output << std::setprecision(10);
+
+        for (const EnrichmentResult& result : filteredEnrichmentResults)
+        {
+            output
+                << quoteCSV(result.getPathwayId()) << ','
+                << quoteCSV(result.getPathwayName()) << ','
+                << quoteCSV(result.getCategory()) << ','
+                << result.getOverlapCount() << ','
+                << result.getPathwayGeneCount() << ','
+                << result.getFoldEnrichment() << ','
+                << result.getPValue() << ','
+                << result.getAdjustedPValue() << ','
+                << quoteCSV(result.getOverlappingGeneList())
+                << '\n';
+        }
+
+        QMessageBox::information(
+            this,
+            "Export Completed",
+            "Functional-enrichment results were exported successfully.\n\n"
+            "File: " + filePath
+        );
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Enrichment Export Error",
             QString::fromStdString(error.what())
         );
     }
