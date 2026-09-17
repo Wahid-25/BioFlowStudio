@@ -122,7 +122,7 @@ void VolcanoPlotWidget::setResults(
         "Volcano Plot: Differential Gene Expression"
     );
     volcanoChart->setBackgroundBrush(QColor("#FFFFFF"));
-    volcanoChart->setAnimationOptions(QChart::SeriesAnimations);
+    volcanoChart->setAnimationOptions(QChart::NoAnimation);
 
     QScatterSeries* upregulatedSeries = new QScatterSeries;
     QScatterSeries* downregulatedSeries = new QScatterSeries;

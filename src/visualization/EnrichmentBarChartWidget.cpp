@@ -66,7 +66,7 @@ void EnrichmentBarChartWidget::setResults(
     QChart* resultChart = new QChart;
     resultChart->addSeries(series);
     resultChart->setTitle("Top Enriched Pathways");
-    resultChart->setAnimationOptions(QChart::SeriesAnimations);
+    resultChart->setAnimationOptions(QChart::NoAnimation);
     resultChart->setBackgroundBrush(QColor("#FFFFFF"));
     resultChart->legend()->hide();
 

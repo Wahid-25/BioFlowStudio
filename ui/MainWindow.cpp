@@ -1,9 +1,12 @@
 #include "MainWindow.h"
 
 #include <QAbstractItemView>
+#include <QApplication>
 #include <QColor>
 #include <QComboBox>
 #include <QDir>
+#include <QDateTime>
+#include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -15,6 +18,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPixmap>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -23,7 +27,9 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QUrl>
 #include <QtCharts/QChart>
+#include <QtCharts/QChartView>
 
 #include <algorithm>
 #include <exception>
@@ -45,6 +51,7 @@
 #include "phylogenetics/PairwiseAligner.h"
 #include "quality/ExpressionQualityAnalyzer.h"
 #include "quality/SequenceQualityAnalyzer.h"
+#include "report/HtmlReportGenerator.h"
 #include "visualization/PhylogeneticTreeWidget.h"
 #include "visualization/ExpressionHeatmapWidget.h"
 #include "visualization/EnrichmentBarChartWidget.h"
@@ -466,8 +473,12 @@ QWidget* MainWindow::createDistanceMatrixPage()
     QPushButton* exportButton =
         new QPushButton("Export CSV and PHYLIP");
 
+    QPushButton* reportButton =
+        new QPushButton("Generate HTML Report");
+
     generateButton->setMinimumHeight(45);
     exportButton->setMinimumHeight(45);
+    reportButton->setMinimumHeight(45);
 
     QHBoxLayout* actionLayout =
         new QHBoxLayout;
@@ -475,6 +486,7 @@ QWidget* MainWindow::createDistanceMatrixPage()
     actionLayout->setSpacing(10);
     actionLayout->addWidget(generateButton);
     actionLayout->addWidget(exportButton);
+    actionLayout->addWidget(reportButton);
 
     matrixStatusLabel =
         new QLabel("No distance matrix generated");
@@ -521,6 +533,13 @@ QWidget* MainWindow::createDistanceMatrixPage()
         &QPushButton::clicked,
         this,
         &MainWindow::exportMatrixResults
+    );
+
+    connect(
+        reportButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::generatePhylogeneticHtmlReport
     );
 
     connect(
@@ -575,8 +594,12 @@ QWidget* MainWindow::createPhylogeneticTreePage()
     QPushButton* exportButton =
         new QPushButton("Export Newick and PNG");
 
+    QPushButton* reportButton =
+        new QPushButton("Generate HTML Report");
+
     generateButton->setMinimumHeight(45);
     exportButton->setMinimumHeight(45);
+    reportButton->setMinimumHeight(45);
 
     QHBoxLayout* actionLayout =
         new QHBoxLayout;
@@ -584,6 +607,7 @@ QWidget* MainWindow::createPhylogeneticTreePage()
     actionLayout->setSpacing(10);
     actionLayout->addWidget(generateButton);
     actionLayout->addWidget(exportButton);
+    actionLayout->addWidget(reportButton);
 
     treeStatusLabel =
         new QLabel("No phylogenetic tree generated");
@@ -636,6 +660,13 @@ QWidget* MainWindow::createPhylogeneticTreePage()
         &QPushButton::clicked,
         this,
         &MainWindow::exportTreeResults
+    );
+
+    connect(
+        reportButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::generatePhylogeneticHtmlReport
     );
 
     connect(
@@ -1036,6 +1067,15 @@ QWidget* MainWindow::createExpressionResultsPage()
     );
     exportTablesButton->setMinimumHeight(46);
 
+    QPushButton* reportButton = new QPushButton(
+        "Generate Complete HTML Report"
+    );
+    reportButton->setMinimumHeight(46);
+
+    QHBoxLayout* resultActionLayout = new QHBoxLayout;
+    resultActionLayout->addWidget(exportTablesButton);
+    resultActionLayout->addWidget(reportButton);
+
     layout->addWidget(title);
     layout->addWidget(description);
     layout->addWidget(expressionResultsSummaryLabel);
@@ -1043,7 +1083,7 @@ QWidget* MainWindow::createExpressionResultsPage()
     layout->addWidget(expressionResultsTable, 1);
     layout->addLayout(visualizationButtonLayout);
     layout->addWidget(enrichmentButton);
-    layout->addWidget(exportTablesButton);
+    layout->addLayout(resultActionLayout);
     layout->addWidget(backButton);
 
     connect(
@@ -1121,6 +1161,13 @@ QWidget* MainWindow::createExpressionResultsPage()
         &QPushButton::clicked,
         this,
         &MainWindow::exportExpressionTables
+    );
+
+    connect(
+        reportButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::generateExpressionHtmlReport
     );
 
     connect(
@@ -3753,6 +3800,542 @@ void MainWindow::exportEnrichmentResults()
         QMessageBox::critical(
             this,
             "Enrichment Export Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+bool MainWindow::saveReportImage(
+    QWidget* widget,
+    const QString& filePath,
+    int width,
+    int height
+)
+{
+    if (widget == nullptr)
+    {
+        return false;
+    }
+
+    QSize originalSize = widget->size();
+    widget->resize(width, height);
+    widget->ensurePolished();
+
+    QChartView* chartView = qobject_cast<QChartView*>(widget);
+
+    if (chartView != nullptr && chartView->chart() != nullptr)
+    {
+        chartView->chart()->setAnimationOptions(QChart::NoAnimation);
+        chartView->chart()->resize(width, height);
+        chartView->chart()->update();
+        chartView->viewport()->update();
+    }
+
+    QApplication::processEvents();
+
+    QPixmap image(width, height);
+    image.fill(Qt::white);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    widget->render(&painter);
+    painter.end();
+
+    bool saved = image.save(filePath, "PNG");
+
+    widget->resize(originalSize);
+    return saved;
+}
+
+void MainWindow::generateExpressionHtmlReport()
+{
+    if (!expressionDataset
+        || classifiedExpressionResults.empty()
+        || currentNormalizedExpressionValues.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No Expression Analysis",
+            "Run differential-expression analysis before generating a report."
+        );
+        return;
+    }
+
+    QString parentPath = QFileDialog::getExistingDirectory(
+        this,
+        "Select Folder for Expression Analysis Report",
+        QString(),
+        QFileDialog::ShowDirsOnly
+    );
+
+    if (parentPath.isEmpty())
+    {
+        return;
+    }
+
+    try
+    {
+        QString timeStamp = QDateTime::currentDateTime().toString(
+            "yyyyMMdd_HHmmss"
+        );
+        QString folderName = "BioFlow_Expression_Report_" + timeStamp;
+        QDir parentDirectory(parentPath);
+
+        if (!parentDirectory.mkpath(folderName))
+        {
+            throw std::runtime_error("Could not create the report folder.");
+        }
+
+        QDir reportDirectory(parentDirectory.filePath(folderName));
+        AnalysisReport report;
+        report.title = "BioFlow Studio Gene-Expression Analysis Report";
+        report.subtitle = "Differential expression, quality control, "
+            "visualization and pathway interpretation";
+        report.generatedAt = QDateTime::currentDateTime()
+            .toString("dddd, dd MMMM yyyy — hh:mm AP")
+            .toStdString();
+        report.overview =
+            "This automatically generated report summarizes the imported "
+            "expression matrix, statistical analysis, significant genes, "
+            "quality checks and graphical results.";
+
+        std::size_t significantCount = 0;
+        std::size_t upregulatedCount = 0;
+        std::size_t downregulatedCount = 0;
+
+        for (const DifferentialExpressionResult& result :
+             classifiedExpressionResults)
+        {
+            if (result.getRegulationStatus()
+                == RegulationStatus::Upregulated)
+            {
+                ++significantCount;
+                ++upregulatedCount;
+            }
+            else if (result.getRegulationStatus()
+                     == RegulationStatus::Downregulated)
+            {
+                ++significantCount;
+                ++downregulatedCount;
+            }
+        }
+
+        report.metadata = {
+            {"Dataset", QFileInfo(selectedExpressionFile)
+                .fileName().toStdString()},
+            {"Genes", std::to_string(expressionDataset->getGeneCount())},
+            {"Samples", std::to_string(expressionDataset->getSampleCount())},
+            {"Normalization", normalizationMethodBox
+                ->currentText().toStdString()},
+            {"Statistical Test", "Welch two-sample t-test"},
+            {"Multiple Testing", "Benjamini-Hochberg FDR correction"},
+            {"Significant Genes", std::to_string(significantCount)},
+            {"Up / Down", std::to_string(upregulatedCount)
+                + " / " + std::to_string(downregulatedCount)},
+            {"Control / Treatment", std::to_string(
+                sampleGrouping.getControlCount()) + " / "
+                + std::to_string(sampleGrouping.getTreatmentCount())}
+        };
+
+        ExpressionQualityAnalyzer qualityAnalyzer(
+            *expressionDataset,
+            sampleGrouping
+        );
+        QualityReport qualityReport = qualityAnalyzer.analyze();
+        ReportTable qualityTable;
+        qualityTable.title = "Expression Data-Quality Assessment";
+        qualityTable.headers = {
+            "Check", "Status", "Observation", "Recommendation"
+        };
+
+        for (const QualityCheck& check : qualityReport.getChecks())
+        {
+            qualityTable.rows.push_back({
+                check.name,
+                QualityReport::statusName(check.status),
+                check.observation,
+                check.recommendation
+            });
+        }
+
+        report.tables.push_back(qualityTable);
+
+        ReportTable resultTable;
+        resultTable.title = "Differential-Expression Results";
+        resultTable.headers = {
+            "Gene", "Control Mean", "Treatment Mean", "Log2 Fold Change",
+            "P-value", "Adjusted P-value", "Regulation"
+        };
+
+        std::size_t resultLimit = std::min<std::size_t>(
+            100,
+            classifiedExpressionResults.size()
+        );
+
+        for (std::size_t index = 0; index < resultLimit; ++index)
+        {
+            const DifferentialExpressionResult& result =
+                classifiedExpressionResults.at(index);
+
+            resultTable.rows.push_back({
+                result.getGeneName(),
+                QString::number(result.getControlMean(), 'g', 7).toStdString(),
+                QString::number(result.getTreatmentMean(), 'g', 7).toStdString(),
+                QString::number(result.getLog2FoldChange(), 'g', 7).toStdString(),
+                QString::number(result.getPValue(), 'g', 7).toStdString(),
+                QString::number(result.getAdjustedPValue(), 'g', 7).toStdString(),
+                result.getRegulationName()
+            });
+        }
+
+        report.tables.push_back(resultTable);
+
+        if (!enrichmentResults.empty())
+        {
+            ReportTable pathwayTable;
+            pathwayTable.title = "Functional Enrichment Results";
+            pathwayTable.headers = {
+                "Pathway", "Category", "Overlap", "Fold Enrichment",
+                "Adjusted P-value", "Contributing Genes"
+            };
+
+            std::size_t pathwayLimit = std::min<std::size_t>(
+                30,
+                enrichmentResults.size()
+            );
+
+            for (std::size_t index = 0; index < pathwayLimit; ++index)
+            {
+                const EnrichmentResult& result = enrichmentResults.at(index);
+                pathwayTable.rows.push_back({
+                    result.getPathwayName(),
+                    result.getCategory(),
+                    std::to_string(result.getOverlapCount()) + " / "
+                        + std::to_string(result.getPathwayGeneCount()),
+                    QString::number(
+                        result.getFoldEnrichment(), 'g', 6
+                    ).toStdString(),
+                    QString::number(
+                        result.getAdjustedPValue(), 'g', 7
+                    ).toStdString(),
+                    result.getOverlappingGeneList()
+                });
+            }
+
+            report.tables.push_back(pathwayTable);
+        }
+
+        volcanoPlotWidget->setResults(
+            classifiedExpressionResults,
+            adjustedPThresholdBox->value(),
+            foldChangeThresholdBox->value()
+        );
+
+        QString volcanoPath = reportDirectory.filePath("volcano_plot.png");
+
+        if (saveReportImage(volcanoPlotWidget, volcanoPath))
+        {
+            report.images.push_back({
+                "Volcano Plot", "volcano_plot.png",
+                "Genes are positioned by log2 fold change and statistical "
+                "significance."
+            });
+        }
+
+        const auto& heatmapGenes = filteredExpressionResults.empty()
+            ? classifiedExpressionResults
+            : filteredExpressionResults;
+
+        expressionHeatmapWidget->setData(
+            *expressionDataset,
+            currentNormalizedExpressionValues,
+            heatmapGenes,
+            sampleGrouping,
+            50
+        );
+
+        QString heatmapPath = reportDirectory.filePath(
+            "expression_heatmap.png"
+        );
+
+        if (saveReportImage(expressionHeatmapWidget, heatmapPath, 1200, 760))
+        {
+            report.images.push_back({
+                "Gene-Expression Heatmap", "expression_heatmap.png",
+                "Row Z-scores show relative expression patterns across samples."
+            });
+        }
+
+        PCAAnalyzer pcaAnalyzer;
+        PCAResult pcaResult = pcaAnalyzer.analyze(
+            *expressionDataset,
+            currentNormalizedExpressionValues
+        );
+        pcaPlotWidget->setResult(pcaResult, sampleGrouping);
+
+        QString pcaPath = reportDirectory.filePath("pca_sample_plot.png");
+
+        if (saveReportImage(pcaPlotWidget, pcaPath))
+        {
+            report.images.push_back({
+                "PCA Sample Plot", "pca_sample_plot.png",
+                "Nearby samples have similar overall expression profiles."
+            });
+        }
+
+        if (!enrichmentResults.empty())
+        {
+            enrichmentBarChart->setResults(enrichmentResults, 10);
+            QString pathwayPath = reportDirectory.filePath(
+                "pathway_enrichment_chart.png"
+            );
+
+            if (saveReportImage(enrichmentBarChart, pathwayPath))
+            {
+                report.images.push_back({
+                    "Pathway Enrichment", "pathway_enrichment_chart.png",
+                    "Bars show -log10 adjusted p-values for ranked pathways."
+                });
+            }
+        }
+
+        report.notes = {
+            "Statistical association does not by itself demonstrate biological "
+            "causation; important results should be validated experimentally.",
+            "Welch's t-test assumes independent biological samples and should "
+            "not be used as a replacement for count-specific RNA-seq models.",
+            "The built-in BioFlow pathway collection is an educational curated "
+            "dataset and is not the complete official GO, KEGG or Reactome database.",
+            "Tables in this report are limited to the first 100 genes and 30 pathways."
+        };
+
+        QString reportPath = reportDirectory.filePath("index.html");
+        HtmlReportGenerator generator;
+        generator.generate(reportPath.toStdString(), report);
+
+        QMessageBox::information(
+            this,
+            "Report Generated",
+            "The complete expression-analysis report was generated.\n\n"
+            "Report: " + reportPath
+        );
+
+        QDesktopServices::openUrl(QUrl::fromLocalFile(reportPath));
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Report Generation Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::generatePhylogeneticHtmlReport()
+{
+    const DistanceMatrix* availableMatrix = nullptr;
+
+    if (currentDistanceMatrix.size() > 0)
+    {
+        availableMatrix = &currentDistanceMatrix;
+    }
+    else if (treeDistanceMatrix.size() > 0)
+    {
+        availableMatrix = &treeDistanceMatrix;
+    }
+
+    if (loadedSequences.empty()
+        || (availableMatrix == nullptr && currentTree.isEmpty()))
+    {
+        QMessageBox::warning(
+            this,
+            "No Phylogenetic Results",
+            "Generate a distance matrix or phylogenetic tree before creating "
+            "the report."
+        );
+        return;
+    }
+
+    QString parentPath = QFileDialog::getExistingDirectory(
+        this,
+        "Select Folder for Phylogenetic Report",
+        QString(),
+        QFileDialog::ShowDirsOnly
+    );
+
+    if (parentPath.isEmpty())
+    {
+        return;
+    }
+
+    try
+    {
+        QString timeStamp = QDateTime::currentDateTime().toString(
+            "yyyyMMdd_HHmmss"
+        );
+        QString folderName = "BioFlow_Phylogenetic_Report_" + timeStamp;
+        QDir parentDirectory(parentPath);
+
+        if (!parentDirectory.mkpath(folderName))
+        {
+            throw std::runtime_error("Could not create the report folder.");
+        }
+
+        QDir reportDirectory(parentDirectory.filePath(folderName));
+        AnalysisReport report;
+        report.title = "BioFlow Studio Phylogenetic Analysis Report";
+        report.subtitle = "Sequence quality, pairwise distances and UPGMA tree";
+        report.generatedAt = QDateTime::currentDateTime()
+            .toString("dddd, dd MMMM yyyy — hh:mm AP")
+            .toStdString();
+        report.overview =
+            "This automatically generated report summarizes the imported "
+            "biological sequences, quality assessment, pairwise distance "
+            "calculation and phylogenetic reconstruction.";
+
+        QString method = !currentTree.isEmpty()
+            ? treeAlignmentMethodBox->currentText()
+            : matrixAlignmentMethodBox->currentText();
+
+        report.metadata = {
+            {"Input Files", std::to_string(selectedFastaFiles.size())},
+            {"Sequences", std::to_string(loadedSequences.size())},
+            {"Distance Method", method.toStdString()},
+            {"Tree Method", currentTree.isEmpty()
+                ? "Not generated" : "UPGMA"},
+            {"Distance Matrix", availableMatrix == nullptr
+                ? "Not generated" : "Available"}
+        };
+
+        std::vector<std::string> sourceFiles;
+
+        for (const QString& filePath : selectedFastaFiles)
+        {
+            sourceFiles.push_back(filePath.toStdString());
+        }
+
+        SequenceQualityAnalyzer qualityAnalyzer(
+            loadedSequences,
+            sourceFiles
+        );
+        QualityReport qualityReport = qualityAnalyzer.analyze();
+        ReportTable qualityTable;
+        qualityTable.title = "FASTA Data-Quality Assessment";
+        qualityTable.headers = {
+            "Check", "Status", "Observation", "Recommendation"
+        };
+
+        for (const QualityCheck& check : qualityReport.getChecks())
+        {
+            qualityTable.rows.push_back({
+                check.name,
+                QualityReport::statusName(check.status),
+                check.observation,
+                check.recommendation
+            });
+        }
+
+        report.tables.push_back(qualityTable);
+
+        ReportTable sequenceTable;
+        sequenceTable.title = "Imported Sequences";
+        sequenceTable.headers = {"Identifier", "Type", "Length"};
+
+        for (const auto& sequence : loadedSequences)
+        {
+            sequenceTable.rows.push_back({
+                sequence->getIdentifier(),
+                sequence->getTypeName(),
+                std::to_string(sequence->getLength())
+            });
+        }
+
+        report.tables.push_back(sequenceTable);
+
+        if (availableMatrix != nullptr)
+        {
+            ReportTable matrixTable;
+            matrixTable.title = "Pairwise Distance Matrix";
+            matrixTable.headers.push_back("Sequence");
+
+            for (const std::string& label : availableMatrix->getLabels())
+            {
+                matrixTable.headers.push_back(label);
+            }
+
+            for (std::size_t row = 0; row < availableMatrix->size(); ++row)
+            {
+                std::vector<std::string> values;
+                values.push_back(availableMatrix->getLabels().at(row));
+
+                for (std::size_t column = 0;
+                     column < availableMatrix->size();
+                     ++column)
+                {
+                    values.push_back(
+                        QString::number(
+                            availableMatrix->getDistance(row, column),
+                            'f', 4
+                        ).toStdString()
+                    );
+                }
+
+                matrixTable.rows.push_back(values);
+            }
+
+            report.tables.push_back(matrixTable);
+        }
+
+        if (!currentTree.isEmpty())
+        {
+            ReportTable newickTable;
+            newickTable.title = "Newick Tree Representation";
+            newickTable.headers = {"Newick"};
+            newickTable.rows = {{currentTree.toNewick()}};
+            report.tables.push_back(newickTable);
+
+            QString treePath = reportDirectory.filePath(
+                "phylogenetic_tree.png"
+            );
+
+            if (saveReportImage(treeGraphic, treePath, 1200, 760))
+            {
+                report.images.push_back({
+                    "UPGMA Phylogenetic Tree", "phylogenetic_tree.png",
+                    "Branching summarizes similarity derived from the selected "
+                    "pairwise distance strategy."
+                });
+            }
+        }
+
+        report.notes = {
+            "UPGMA assumes an approximately constant evolutionary rate among "
+            "lineages; this assumption may not hold for every dataset.",
+            "Tree topology and branch lengths depend on sequence quality, "
+            "alignment strategy and distance definition.",
+            "This educational analysis should be confirmed with established "
+            "phylogenetic software before research publication."
+        };
+
+        QString reportPath = reportDirectory.filePath("index.html");
+        HtmlReportGenerator generator;
+        generator.generate(reportPath.toStdString(), report);
+
+        QMessageBox::information(
+            this,
+            "Report Generated",
+            "The phylogenetic analysis report was generated.\n\n"
+            "Report: " + reportPath
+        );
+
+        QDesktopServices::openUrl(QUrl::fromLocalFile(reportPath));
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Report Generation Error",
             QString::fromStdString(error.what())
         );
     }

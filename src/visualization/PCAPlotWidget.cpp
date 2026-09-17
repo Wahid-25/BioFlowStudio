@@ -109,7 +109,7 @@ void PCAPlotWidget::setResult(
         "PCA: Sample Clustering by Expression Profile"
     );
     pcaChart->setBackgroundBrush(QColor("#FFFFFF"));
-    pcaChart->setAnimationOptions(QChart::SeriesAnimations);
+    pcaChart->setAnimationOptions(QChart::NoAnimation);
 
     QScatterSeries* controlSeries = new QScatterSeries;
     QScatterSeries* treatmentSeries = new QScatterSeries;
