@@ -39,6 +39,8 @@
 #include "gene_expression/WelchTTestAnalyzer.h"
 #include "phylogenetics/FastaParser.h"
 #include "phylogenetics/PairwiseAligner.h"
+#include "quality/ExpressionQualityAnalyzer.h"
+#include "quality/SequenceQualityAnalyzer.h"
 #include "visualization/PhylogeneticTreeWidget.h"
 #include "visualization/ExpressionHeatmapWidget.h"
 #include "visualization/PCAPlotWidget.h"
@@ -126,6 +128,8 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionVolcanoPage());
     pages->addWidget(createExpressionHeatmapPage());
     pages->addWidget(createExpressionPCAPage());
+    pages->addWidget(createPhylogeneticQualityPage());
+    pages->addWidget(createExpressionQualityPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -342,11 +346,18 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
             "Phylogenetic Tree Analysis"
         );
 
+    phylogeneticQualityButton =
+        new QPushButton(
+            "Data Quality Dashboard"
+        );
+
     openMatrixButton->setMinimumHeight(58);
     openTreeButton->setMinimumHeight(58);
+    phylogeneticQualityButton->setMinimumHeight(58);
 
     openMatrixButton->setEnabled(false);
     openTreeButton->setEnabled(false);
+    phylogeneticQualityButton->setEnabled(false);
 
     QHBoxLayout* analysisOptions =
         new QHBoxLayout;
@@ -354,6 +365,7 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
     analysisOptions->setSpacing(12);
     analysisOptions->addWidget(openMatrixButton);
     analysisOptions->addWidget(openTreeButton);
+    analysisOptions->addWidget(phylogeneticQualityButton);
 
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
@@ -387,6 +399,13 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openPhylogeneticTreePage
+    );
+
+    connect(
+        phylogeneticQualityButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openPhylogeneticQualityPage
     );
 
     connect(
@@ -699,6 +718,15 @@ QWidget* MainWindow::createGeneExpressionPage()
     configureExpressionButton->setMinimumHeight(48);
     configureExpressionButton->setEnabled(false);
 
+    expressionQualityButton =
+        new QPushButton("View Data Quality Dashboard");
+    expressionQualityButton->setMinimumHeight(48);
+    expressionQualityButton->setEnabled(false);
+
+    QHBoxLayout* expressionActionLayout = new QHBoxLayout;
+    expressionActionLayout->addWidget(expressionQualityButton);
+    expressionActionLayout->addWidget(configureExpressionButton);
+
     QPushButton* backButton =
         new QPushButton("Back to Dashboard");
 
@@ -710,7 +738,7 @@ QWidget* MainWindow::createGeneExpressionPage()
     layout->addWidget(expressionFileLabel);
     layout->addWidget(expressionSummaryLabel);
     layout->addWidget(expressionPreviewTable, 1);
-    layout->addWidget(configureExpressionButton);
+    layout->addLayout(expressionActionLayout);
     layout->addWidget(backButton);
 
     connect(
@@ -725,6 +753,13 @@ QWidget* MainWindow::createGeneExpressionPage()
         &QPushButton::clicked,
         this,
         &MainWindow::openExpressionConfigurationPage
+    );
+
+    connect(
+        expressionQualityButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openExpressionQualityPage
     );
 
     connect(
@@ -1348,6 +1383,128 @@ QWidget* MainWindow::createExpressionPCAPage()
     return page;
 }
 
+QWidget* MainWindow::createPhylogeneticQualityPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(30, 20, 30, 20);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "FASTA Data-Quality Dashboard"
+    );
+
+    QLabel* description = createDescription(
+        "BioFlow Studio checks sequence counts, identifiers, lengths, "
+        "characters, GC content and compatibility with distance methods."
+    );
+
+    phylogeneticQualitySummaryLabel = new QLabel(
+        "Import FASTA data to generate a quality report."
+    );
+    phylogeneticQualitySummaryLabel->setAlignment(Qt::AlignCenter);
+    phylogeneticQualitySummaryLabel->setWordWrap(true);
+
+    phylogeneticQualityTable = new QTableWidget;
+    phylogeneticQualityTable->setColumnCount(4);
+    phylogeneticQualityTable->setHorizontalHeaderLabels(
+        {"Quality Check", "Status", "Observation", "Recommendation"}
+    );
+    phylogeneticQualityTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+    phylogeneticQualityTable->setSelectionBehavior(
+        QAbstractItemView::SelectRows
+    );
+    phylogeneticQualityTable->setWordWrap(true);
+    phylogeneticQualityTable->verticalHeader()->setVisible(false);
+    phylogeneticQualityTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::Stretch
+    );
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Phylogenetic Setup"
+    );
+    backButton->setMinimumHeight(44);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(phylogeneticQualitySummaryLabel);
+    layout->addWidget(phylogeneticQualityTable, 1);
+    layout->addWidget(backButton);
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToPhylogeneticSetup
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createExpressionQualityPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(30, 20, 30, 20);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle(
+        "Expression Data-Quality Dashboard"
+    );
+
+    QLabel* description = createDescription(
+        "BioFlow Studio checks matrix completeness, identifiers, zeros, "
+        "constant genes, sample totals and biological replicate readiness."
+    );
+
+    expressionQualitySummaryLabel = new QLabel(
+        "Import expression data to generate a quality report."
+    );
+    expressionQualitySummaryLabel->setAlignment(Qt::AlignCenter);
+    expressionQualitySummaryLabel->setWordWrap(true);
+
+    expressionQualityTable = new QTableWidget;
+    expressionQualityTable->setColumnCount(4);
+    expressionQualityTable->setHorizontalHeaderLabels(
+        {"Quality Check", "Status", "Observation", "Recommendation"}
+    );
+    expressionQualityTable->setEditTriggers(
+        QAbstractItemView::NoEditTriggers
+    );
+    expressionQualityTable->setSelectionBehavior(
+        QAbstractItemView::SelectRows
+    );
+    expressionQualityTable->setWordWrap(true);
+    expressionQualityTable->verticalHeader()->setVisible(false);
+    expressionQualityTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::Stretch
+    );
+
+    QPushButton* backButton = new QPushButton(
+        "Back to Expression Dataset"
+    );
+    backButton->setMinimumHeight(44);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(expressionQualitySummaryLabel);
+    layout->addWidget(expressionQualityTable, 1);
+    layout->addWidget(backButton);
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToGeneExpressionSetup
+    );
+
+    return page;
+}
+
 void MainWindow::selectPhylogeneticWorkspace()
 {
     currentProject.setWorkspaceType(
@@ -1552,6 +1709,71 @@ void MainWindow::openExpressionPCAPage()
     }
 }
 
+void MainWindow::openPhylogeneticQualityPage()
+{
+    if (loadedSequences.empty())
+    {
+        QMessageBox::warning(
+            this,
+            "No FASTA Data",
+            "Import valid FASTA sequences before opening quality control."
+        );
+        return;
+    }
+
+    std::vector<std::string> sourceFiles;
+    sourceFiles.reserve(
+        static_cast<std::size_t>(selectedFastaFiles.size())
+    );
+
+    for (const QString& filePath : selectedFastaFiles)
+    {
+        sourceFiles.push_back(filePath.toStdString());
+    }
+
+    SequenceQualityAnalyzer analyzer(
+        loadedSequences,
+        sourceFiles
+    );
+
+    QualityReport report = analyzer.analyze();
+    populateQualityReportTable(
+        phylogeneticQualityTable,
+        phylogeneticQualitySummaryLabel,
+        report
+    );
+
+    pages->setCurrentIndex(PhylogeneticQualityPage);
+}
+
+void MainWindow::openExpressionQualityPage()
+{
+    if (!expressionDataset)
+    {
+        QMessageBox::warning(
+            this,
+            "No Expression Data",
+            "Import a valid expression dataset before opening "
+            "quality control."
+        );
+        return;
+    }
+
+    ExpressionQualityAnalyzer analyzer(
+        *expressionDataset,
+        sampleGrouping
+    );
+
+    QualityReport report = analyzer.analyze();
+    populateQualityReportTable(
+        expressionQualityTable,
+        expressionQualitySummaryLabel,
+        report
+    );
+
+    pages->setCurrentIndex(ExpressionQualityPage);
+}
+
 void MainWindow::returnToDashboard()
 {
     pages->setCurrentIndex(
@@ -1612,6 +1834,7 @@ void MainWindow::importFastaFiles()
 
     openMatrixButton->setEnabled(false);
     openTreeButton->setEnabled(false);
+    phylogeneticQualityButton->setEnabled(false);
 
     try
     {
@@ -1686,6 +1909,10 @@ void MainWindow::importFastaFiles()
 
         openTreeButton->setEnabled(
             enoughSequences
+        );
+
+        phylogeneticQualityButton->setEnabled(
+            !loadedSequences.empty()
         );
     }
     catch (const std::exception& error)
@@ -2170,6 +2397,7 @@ void MainWindow::importExpressionFile()
     }
 
     ExpressionParser parser;
+    expressionQualityButton->setEnabled(false);
 
     try
     {
@@ -2191,6 +2419,7 @@ void MainWindow::importExpressionFile()
         filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(true);
+        expressionQualityButton->setEnabled(true);
 
         selectedExpressionFile = filePath;
 
@@ -2362,6 +2591,7 @@ void MainWindow::importExpressionFile()
         filteredExpressionResults.clear();
         currentNormalizedExpressionValues.clear();
         configureExpressionButton->setEnabled(false);
+        expressionQualityButton->setEnabled(false);
 
         expressionPreviewTable->clear();
         expressionPreviewTable->setRowCount(0);
@@ -2386,6 +2616,101 @@ void MainWindow::importExpressionFile()
             QString::fromStdString(
                 error.what()
             )
+        );
+    }
+}
+
+void MainWindow::populateQualityReportTable(
+    QTableWidget* table,
+    QLabel* summaryLabel,
+    const QualityReport& report
+)
+{
+    table->clearContents();
+    table->setRowCount(
+        static_cast<int>(report.getChecks().size())
+    );
+
+    for (std::size_t row = 0;
+         row < report.getChecks().size();
+         ++row)
+    {
+        const QualityCheck& check = report.getChecks().at(row);
+
+        QTableWidgetItem* nameItem = new QTableWidgetItem(
+            QString::fromStdString(check.name)
+        );
+        QTableWidgetItem* statusItem = new QTableWidgetItem(
+            QString::fromStdString(
+                QualityReport::statusName(check.status)
+            )
+        );
+        QTableWidgetItem* observationItem = new QTableWidgetItem(
+            QString::fromStdString(check.observation)
+        );
+        QTableWidgetItem* recommendationItem = new QTableWidgetItem(
+            QString::fromStdString(check.recommendation)
+        );
+
+        statusItem->setTextAlignment(Qt::AlignCenter);
+
+        QColor background;
+        QColor foreground;
+
+        if (check.status == QualityStatus::Pass)
+        {
+            background = QColor("#CDEFD8");
+            foreground = QColor("#176B35");
+        }
+        else if (check.status == QualityStatus::Warning)
+        {
+            background = QColor("#FFF0BF");
+            foreground = QColor("#8A5A00");
+        }
+        else
+        {
+            background = QColor("#FFD6D6");
+            foreground = QColor("#9C1C1C");
+        }
+
+        statusItem->setBackground(background);
+        statusItem->setForeground(foreground);
+
+        int tableRow = static_cast<int>(row);
+        table->setItem(tableRow, 0, nameItem);
+        table->setItem(tableRow, 1, statusItem);
+        table->setItem(tableRow, 2, observationItem);
+        table->setItem(tableRow, 3, recommendationItem);
+    }
+
+    table->resizeRowsToContents();
+
+    summaryLabel->setText(
+        QString(
+            "Overall status: %1 | %2 passed | %3 warning(s) | %4 failed"
+        )
+        .arg(QString::fromStdString(report.getOverallStatusName()))
+        .arg(static_cast<qulonglong>(report.getPassCount()))
+        .arg(static_cast<qulonglong>(report.getWarningCount()))
+        .arg(static_cast<qulonglong>(report.getFailCount()))
+    );
+
+    if (report.getOverallStatus() == QualityStatus::Pass)
+    {
+        summaryLabel->setStyleSheet(
+            "font-weight: bold; color: #176B35;"
+        );
+    }
+    else if (report.getOverallStatus() == QualityStatus::Warning)
+    {
+        summaryLabel->setStyleSheet(
+            "font-weight: bold; color: #8A5A00;"
+        );
+    }
+    else
+    {
+        summaryLabel->setStyleSheet(
+            "font-weight: bold; color: #9C1C1C;"
         );
     }
 }

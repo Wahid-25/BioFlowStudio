@@ -15,6 +15,7 @@
 #include "phylogenetics/DistanceMatrix.h"
 #include "phylogenetics/Sequence.h"
 #include "phylogenetics/UPGMATree.h"
+#include "quality/QualityReport.h"
 
 class QLabel;
 class QListWidget;
@@ -49,6 +50,8 @@ private:
     static constexpr int ExpressionVolcanoPage = 7;
     static constexpr int ExpressionHeatmapPage = 8;
     static constexpr int ExpressionPCAPage = 9;
+    static constexpr int PhylogeneticQualityPage = 10;
+    static constexpr int ExpressionQualityPage = 11;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -57,6 +60,7 @@ private:
     QListWidget* phylogeneticFileList = nullptr;
     QPushButton* openMatrixButton = nullptr;
     QPushButton* openTreeButton = nullptr;
+    QPushButton* phylogeneticQualityButton = nullptr;
 
     QStringList selectedFastaFiles;
     std::vector<std::unique_ptr<Sequence>> loadedSequences;
@@ -79,6 +83,7 @@ private:
     QLabel* expressionSummaryLabel = nullptr;
     QTableWidget* expressionPreviewTable = nullptr;
     QPushButton* configureExpressionButton = nullptr;
+    QPushButton* expressionQualityButton = nullptr;
 
     SampleGrouping sampleGrouping;
     QTableWidget* sampleGroupingTable = nullptr;
@@ -104,6 +109,11 @@ private:
     PCAPlotWidget* pcaPlotWidget = nullptr;
     QLabel* pcaSummaryLabel = nullptr;
 
+    QTableWidget* phylogeneticQualityTable = nullptr;
+    QLabel* phylogeneticQualitySummaryLabel = nullptr;
+    QTableWidget* expressionQualityTable = nullptr;
+    QLabel* expressionQualitySummaryLabel = nullptr;
+
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
     QWidget* createDistanceMatrixPage();
@@ -114,6 +124,8 @@ private:
     QWidget* createExpressionVolcanoPage();
     QWidget* createExpressionHeatmapPage();
     QWidget* createExpressionPCAPage();
+    QWidget* createPhylogeneticQualityPage();
+    QWidget* createExpressionQualityPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -124,6 +136,8 @@ private:
     void openExpressionVolcanoPage();
     void openExpressionHeatmapPage();
     void openExpressionPCAPage();
+    void openPhylogeneticQualityPage();
+    void openExpressionQualityPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();
@@ -152,6 +166,11 @@ private:
 
     void populateSampleGroupingTable();
     void populateExpressionResultsTable();
+    void populateQualityReportTable(
+        QTableWidget* table,
+        QLabel* summaryLabel,
+        const QualityReport& report
+    );
     void applyExpressionFilters();
     void resetExpressionFilters();
 

@@ -59,6 +59,14 @@ qt_add_executable(BioFlowStudio
     src/core/Dataset.cpp
     src/core/Dataset.h
 
+    src/quality/QualityReport.cpp
+    src/quality/QualityReport.h
+    src/quality/DataQualityAnalyzer.h
+    src/quality/SequenceQualityAnalyzer.cpp
+    src/quality/SequenceQualityAnalyzer.h
+    src/quality/ExpressionQualityAnalyzer.cpp
+    src/quality/ExpressionQualityAnalyzer.h
+
     src/workflow/AnalysisContext.cpp
     src/workflow/AnalysisContext.h
     src/workflow/AnalysisResult.cpp
