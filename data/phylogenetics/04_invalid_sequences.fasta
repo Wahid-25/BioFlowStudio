@@ -1,0 +1,6 @@
+>Valid_record
+ATGCCGTAGCTTACGATCGA
+>Invalid_numbers_and_symbols
+ATGC12TAGC??TTACGATCGA
+>Empty_record
+

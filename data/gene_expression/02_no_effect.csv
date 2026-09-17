@@ -1,0 +1,13 @@
+Gene,Control_1,Control_2,Control_3,Treatment_1,Treatment_2,Treatment_3
+GeneA,20,21,19,20,22,19
+GeneB,35,34,36,36,35,34
+GeneC,48,50,49,49,48,51
+GeneD,12,13,11,13,12,12
+GeneE,70,72,71,71,70,73
+GeneF,25,24,26,25,27,24
+GeneG,91,89,90,90,92,89
+GeneH,44,45,43,45,44,46
+GeneI,17,18,16,18,17,17
+GeneJ,62,61,63,63,62,60
+GeneK,39,40,38,40,39,41
+GeneL,53,55,54,54,53,56

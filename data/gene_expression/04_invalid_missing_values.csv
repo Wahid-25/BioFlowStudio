@@ -1,0 +1,6 @@
+Gene,Control_1,Control_2,Treatment_1,Treatment_2
+GeneA,20,21,50,52
+GeneB,35,,70,72
+GeneC,48,not_a_number,49,51
+GeneD,-12,13,30,31
+GeneE,70,72,NA,90
