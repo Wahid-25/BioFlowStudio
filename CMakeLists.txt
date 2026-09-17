@@ -68,6 +68,10 @@ qt_add_executable(BioFlowStudio
     src/core/Dataset.cpp
     src/core/Dataset.h
 
+    src/report/AnalysisReport.h
+    src/report/HtmlReportGenerator.cpp
+    src/report/HtmlReportGenerator.h
+
     src/quality/QualityReport.cpp
     src/quality/QualityReport.h
     src/quality/DataQualityAnalyzer.h

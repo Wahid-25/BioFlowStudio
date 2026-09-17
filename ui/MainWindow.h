@@ -171,6 +171,8 @@ private:
     void exportTreeResults();
     void exportExpressionTables();
     void exportEnrichmentResults();
+    void generateExpressionHtmlReport();
+    void generatePhylogeneticHtmlReport();
     void exportWidgetImage(
         QWidget* widget,
         const QString& suggestedFileName,
@@ -193,6 +195,12 @@ private:
     void applyEnrichmentFilters();
     void resetEnrichmentFilters();
     void populateEnrichmentResultsTable();
+    bool saveReportImage(
+        QWidget* widget,
+        const QString& filePath,
+        int width = 1200,
+        int height = 700
+    );
 
     ExpressionFilterSettings
     getCurrentExpressionFilterSettings() const;
