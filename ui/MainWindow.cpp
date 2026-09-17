@@ -374,6 +374,50 @@ MainWindow::MainWindow(QWidget* parent)
             color: #E5EBF0;
         }
 
+        QPushButton#compactActionButton {
+            background-color: #E7EEF5;
+            color: #163A5F;
+            border: 1px solid #B8C8D6;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 6px 12px;
+        }
+
+        QPushButton#compactActionButton:hover {
+            background-color: #D5E4F0;
+            border-color: #7193AF;
+        }
+
+        QPushButton#compactPrimaryButton {
+            background-color: #245C8A;
+            color: white;
+            border: 1px solid #245C8A;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 6px 13px;
+        }
+
+        QPushButton#compactPrimaryButton:hover {
+            background-color: #163A5F;
+        }
+
+        QPushButton#compactNavigationButton {
+            background-color: transparent;
+            color: #40566B;
+            border: 1px solid #AEBCC8;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 6px 12px;
+        }
+
+        QPushButton#compactNavigationButton:hover {
+            background-color: #E7EEF5;
+            color: #163A5F;
+        }
+
         QListWidget {
             background-color: white;
             color: #203040;
@@ -1167,7 +1211,8 @@ QWidget* MainWindow::createExpressionResultsPage()
     QPushButton* resetFiltersButton = new QPushButton(
         "Reset Filters"
     );
-    resetFiltersButton->setMinimumHeight(36);
+    resetFiltersButton->setObjectName("compactActionButton");
+    resetFiltersButton->setFixedHeight(34);
 
     expressionFilterSummaryLabel = new QLabel(
         "Run an analysis to enable interactive filtering."
@@ -1220,44 +1265,97 @@ QWidget* MainWindow::createExpressionResultsPage()
     QPushButton* backButton = new QPushButton(
         "Back to Analysis Configuration"
     );
-    backButton->setMinimumHeight(44);
+    backButton->setObjectName("compactNavigationButton");
+    backButton->setFixedHeight(34);
+    backButton->setMaximumWidth(235);
 
     QPushButton* volcanoButton = new QPushButton(
-        "Open Interactive Volcano Plot"
+        "Volcano Plot"
     );
-    volcanoButton->setMinimumHeight(46);
+    volcanoButton->setToolTip(
+        "Explore fold change and statistical significance interactively."
+    );
 
     QPushButton* heatmapButton = new QPushButton(
-        "Open Gene-Expression Heatmap"
+        "Expression Heatmap"
     );
-    heatmapButton->setMinimumHeight(46);
+    heatmapButton->setToolTip(
+        "Compare relative expression patterns across samples."
+    );
 
     QPushButton* pcaButton = new QPushButton(
-        "Open PCA Sample Plot"
+        "PCA Sample Plot"
     );
-    pcaButton->setMinimumHeight(46);
-
-    QHBoxLayout* visualizationButtonLayout = new QHBoxLayout;
-    visualizationButtonLayout->addWidget(volcanoButton);
-    visualizationButtonLayout->addWidget(heatmapButton);
-    visualizationButtonLayout->addWidget(pcaButton);
+    pcaButton->setToolTip(
+        "Inspect sample clustering using principal component analysis."
+    );
 
     QPushButton* enrichmentButton = new QPushButton(
-        "Open Functional Enrichment and Pathway Analysis"
+        "Pathway Enrichment"
     );
-    enrichmentButton->setMinimumHeight(46);
+    enrichmentButton->setToolTip(
+        "Analyze enriched biological functions and pathways."
+    );
 
     QPushButton* exportTablesButton = new QPushButton(
-        "Export Analysis Tables and Summary"
+        "Export Tables"
     );
-    exportTablesButton->setMinimumHeight(46);
+    exportTablesButton->setToolTip(
+        "Export differential-expression tables and analysis summary."
+    );
 
     QPushButton* reportButton = new QPushButton(
-        "Generate Complete HTML Report"
+        "HTML Report"
     );
-    reportButton->setMinimumHeight(46);
+    reportButton->setToolTip(
+        "Generate the complete interactive analysis report."
+    );
+
+    const std::vector<QPushButton*> explorationButtons = {
+        volcanoButton,
+        heatmapButton,
+        pcaButton,
+        enrichmentButton
+    };
+
+    for (QPushButton* button : explorationButtons)
+    {
+        button->setObjectName("compactActionButton");
+        button->setFixedHeight(34);
+        button->setMaximumWidth(175);
+    }
+
+    exportTablesButton->setObjectName("compactPrimaryButton");
+    reportButton->setObjectName("compactPrimaryButton");
+    exportTablesButton->setFixedHeight(34);
+    reportButton->setFixedHeight(34);
+    exportTablesButton->setMaximumWidth(145);
+    reportButton->setMaximumWidth(145);
+
+    QLabel* exploreLabel = new QLabel("Explore results:");
+    exploreLabel->setStyleSheet(
+        "font-size: 13px; font-weight: bold; color: #40566B;"
+    );
+
+    QLabel* outputLabel = new QLabel("Output:");
+    outputLabel->setStyleSheet(
+        "font-size: 13px; font-weight: bold; color: #40566B;"
+    );
+
+    QHBoxLayout* explorationLayout = new QHBoxLayout;
+    explorationLayout->setSpacing(7);
+    explorationLayout->addWidget(exploreLabel);
+    explorationLayout->addWidget(volcanoButton);
+    explorationLayout->addWidget(heatmapButton);
+    explorationLayout->addWidget(pcaButton);
+    explorationLayout->addWidget(enrichmentButton);
+    explorationLayout->addStretch();
 
     QHBoxLayout* resultActionLayout = new QHBoxLayout;
+    resultActionLayout->setSpacing(7);
+    resultActionLayout->addWidget(backButton);
+    resultActionLayout->addStretch();
+    resultActionLayout->addWidget(outputLabel);
     resultActionLayout->addWidget(exportTablesButton);
     resultActionLayout->addWidget(reportButton);
 
@@ -1266,10 +1364,8 @@ QWidget* MainWindow::createExpressionResultsPage()
     layout->addWidget(expressionResultsSummaryLabel);
     layout->addLayout(filterLayout);
     layout->addWidget(expressionResultsTable, 1);
-    layout->addLayout(visualizationButtonLayout);
-    layout->addWidget(enrichmentButton);
+    layout->addLayout(explorationLayout);
     layout->addLayout(resultActionLayout);
-    layout->addWidget(backButton);
 
     connect(
         geneSearchBox,
