@@ -22,6 +22,7 @@
 class QLabel;
 class QListWidget;
 class QComboBox;
+class QCloseEvent;
 class QDoubleSpinBox;
 class QLineEdit;
 class QPlainTextEdit;
@@ -42,6 +43,9 @@ class MainWindow : public QMainWindow
 {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private:
     static constexpr int DashboardPage = 0;
@@ -140,6 +144,7 @@ private:
 
     ProjectSession projectSession;
     QString currentProjectFile;
+    bool projectModified = false;
     QTableWidget* projectHistoryTable = nullptr;
     QLabel* projectHistorySummaryLabel = nullptr;
 
@@ -228,6 +233,10 @@ private:
     void openSelectedWorkflowStep();
     void saveProject();
     void loadProject();
+    void showAboutDialog();
+    void updateWindowTitle();
+    bool confirmDiscardUnsavedChanges();
+    void markProjectModified();
     void refreshProjectHistoryTable();
     void recordHistory(
         const QString& workspace,

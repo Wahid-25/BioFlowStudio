@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QColor>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDir>
 #include <QDateTime>
@@ -14,6 +15,8 @@
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -22,9 +25,11 @@
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QStackedWidget>
+#include <QStatusBar>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -120,6 +125,41 @@ QLabel* createDescription(const QString& text)
 
     return label;
 }
+
+QIcon createBioFlowIcon()
+{
+    QPixmap pixmap(64, 64);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor("#163A5F"));
+    painter.drawRoundedRect(2, 2, 60, 60, 13, 13);
+
+    QPainterPath leftStrand;
+    leftStrand.moveTo(20, 12);
+    leftStrand.cubicTo(46, 23, 18, 41, 44, 52);
+
+    QPainterPath rightStrand;
+    rightStrand.moveTo(44, 12);
+    rightStrand.cubicTo(18, 23, 46, 41, 20, 52);
+
+    QPen strandPen(QColor("#62D6C5"), 4.0, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(strandPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(leftStrand);
+    painter.drawPath(rightStrand);
+
+    QPen rungPen(QColor("#FFFFFF"), 2.4, Qt::SolidLine, Qt::RoundCap);
+    painter.setPen(rungPen);
+    painter.drawLine(25, 18, 39, 18);
+    painter.drawLine(22, 27, 42, 27);
+    painter.drawLine(22, 37, 42, 37);
+    painter.drawLine(25, 46, 39, 46);
+
+    return QIcon(pixmap);
+}
 }
 
 MainWindow::MainWindow(QWidget* parent)
@@ -130,7 +170,10 @@ MainWindow::MainWindow(QWidget* parent)
           WorkspaceType::NotSelected
       )
 {
-    setWindowTitle("BioFlow Studio");
+    QIcon applicationIcon = createBioFlowIcon();
+    QApplication::setWindowIcon(applicationIcon);
+    setWindowIcon(applicationIcon);
+    updateWindowTitle();
     resize(1100, 700);
     setMinimumSize(900, 600);
 
@@ -164,6 +207,29 @@ MainWindow::MainWindow(QWidget* parent)
     QMenu* viewMenu = menuBar()->addMenu("View");
     QAction* historyAction = viewMenu->addAction("Analysis History");
 
+    QMenu* analysisMenu = menuBar()->addMenu("Analysis");
+    QAction* phylogeneticAction =
+        analysisMenu->addAction("Phylogenetic Analysis");
+    QAction* expressionAction =
+        analysisMenu->addAction("Gene Expression Analysis");
+    analysisMenu->addSeparator();
+    QAction* workflowAction =
+        analysisMenu->addAction("Workflow Builder");
+
+    QMenu* helpMenu = menuBar()->addMenu("Help");
+    QAction* aboutAction = helpMenu->addAction("About BioFlow Studio");
+
+    openProjectAction->setShortcut(QKeySequence::Open);
+    saveProjectAction->setShortcut(QKeySequence::Save);
+    exitAction->setShortcut(QKeySequence::Quit);
+    historyAction->setShortcut(QKeySequence("Ctrl+H"));
+    aboutAction->setShortcut(QKeySequence("F1"));
+
+    openProjectAction->setStatusTip("Open a saved BioFlow project");
+    saveProjectAction->setStatusTip("Save datasets, settings and history");
+    historyAction->setStatusTip("View the current project's analysis record");
+    workflowAction->setStatusTip("Open the graphical workflow builder");
+
     connect(
         openProjectAction,
         &QAction::triggered,
@@ -182,7 +248,77 @@ MainWindow::MainWindow(QWidget* parent)
         this,
         &MainWindow::openProjectHistoryPage
     );
+    connect(
+        phylogeneticAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::selectPhylogeneticWorkspace
+    );
+    connect(
+        expressionAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::selectGeneExpressionWorkspace
+    );
+    connect(
+        workflowAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::openWorkflowBuilderPage
+    );
+    connect(
+        aboutAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::showAboutDialog
+    );
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
+
+    statusBar()->showMessage(
+        "Ready | Open a workspace or load a saved BioFlow project"
+    );
+
+    const std::vector<QComboBox*> savedSettingBoxes = {
+        matrixAlignmentMethodBox,
+        treeAlignmentMethodBox,
+        normalizationMethodBox,
+        workflowTemplateBox
+    };
+
+    for (QComboBox* box : savedSettingBoxes)
+    {
+        connect(
+            box,
+            &QComboBox::currentIndexChanged,
+            this,
+            [this](int)
+            {
+                markProjectModified();
+            }
+        );
+    }
+
+    const std::vector<QDoubleSpinBox*> savedThresholdBoxes = {
+        adjustedPThresholdBox,
+        foldChangeThresholdBox,
+        enrichmentPThresholdBox
+    };
+
+    for (QDoubleSpinBox* box : savedThresholdBoxes)
+    {
+        connect(
+            box,
+            &QDoubleSpinBox::valueChanged,
+            this,
+            [this](double)
+            {
+                markProjectModified();
+            }
+        );
+    }
+
+    projectModified = false;
+    updateWindowTitle();
 
     setStyleSheet(
         R"(
@@ -3812,11 +3948,100 @@ void MainWindow::recordHistory(
 )
 {
     projectSession.addHistory(workspace, action, status, details);
+    markProjectModified();
 
     if (projectHistoryTable != nullptr)
     {
         refreshProjectHistoryTable();
     }
+}
+
+void MainWindow::markProjectModified()
+{
+    projectModified = true;
+    updateWindowTitle();
+}
+
+void MainWindow::updateWindowTitle()
+{
+    QString title = "BioFlow Studio";
+
+    if (!projectSession.projectName.isEmpty()
+        && projectSession.projectName != "Untitled BioFlow Project")
+    {
+        title += " - " + projectSession.projectName;
+    }
+
+    if (projectModified)
+    {
+        title += " *";
+    }
+
+    setWindowTitle(title);
+}
+
+bool MainWindow::confirmDiscardUnsavedChanges()
+{
+    if (!projectModified)
+    {
+        return true;
+    }
+
+    QMessageBox messageBox(this);
+    messageBox.setWindowTitle("Unsaved Project Changes");
+    messageBox.setIcon(QMessageBox::Warning);
+    messageBox.setText("The current BioFlow project has unsaved changes.");
+    messageBox.setInformativeText(
+        "Would you like to save the project before continuing?"
+    );
+    messageBox.setStandardButtons(
+        QMessageBox::Save
+        | QMessageBox::Discard
+        | QMessageBox::Cancel
+    );
+    messageBox.setDefaultButton(QMessageBox::Save);
+
+    int choice = messageBox.exec();
+
+    if (choice == QMessageBox::Save)
+    {
+        saveProject();
+        return !projectModified;
+    }
+
+    return choice == QMessageBox::Discard;
+}
+
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    if (confirmDiscardUnsavedChanges())
+    {
+        event->accept();
+    }
+    else
+    {
+        event->ignore();
+    }
+}
+
+void MainWindow::showAboutDialog()
+{
+    QMessageBox::about(
+        this,
+        "About BioFlow Studio",
+        "<h2 style='color:#163A5F;'>BioFlow Studio 1.0</h2>"
+        "<p><b>Object-Oriented Bioinformatics Workflow Platform</b></p>"
+        "<p>BioFlow Studio combines phylogenetic analysis, gene-expression "
+        "analysis, quality control, pathway enrichment, interactive "
+        "visualization and reproducible project workflows.</p>"
+        "<p><b>Technology:</b> C++17, Qt 6, CMake and MinGW</p>"
+        "<p><b>OOP design:</b> abstraction, inheritance, polymorphism, "
+        "encapsulation and strategy-based algorithms</p>"
+        "<p><b>Project leader and integrator:</b> Muhammad Abdul Wahid<br>"
+        "Developed as a four-member undergraduate bioinformatics project.</p>"
+        "<p style='color:#40566B;'>Educational software &mdash; analytical "
+        "results should be validated before research or clinical use.</p>"
+    );
 }
 
 void MainWindow::refreshProjectHistoryTable()
@@ -3947,12 +4172,15 @@ void MainWindow::saveProject()
         ProjectSerializer::save(filePath, projectSession);
 
         currentProjectFile = filePath;
-        setWindowTitle(
-            "BioFlow Studio - " + projectSession.projectName
-        );
+        projectModified = false;
+        updateWindowTitle();
         refreshProjectHistoryTable();
         statusLabel->setText(
             "Project saved: " + QFileInfo(filePath).fileName()
+        );
+        statusBar()->showMessage(
+            "Project saved successfully: " + filePath,
+            7000
         );
 
         QMessageBox::information(
@@ -3987,6 +4215,11 @@ void MainWindow::saveProject()
 
 void MainWindow::loadProject()
 {
+    if (!confirmDiscardUnsavedChanges())
+    {
+        return;
+    }
+
     QString filePath = QFileDialog::getOpenFileName(
         this,
         "Open BioFlow Project",
@@ -4099,11 +4332,14 @@ void MainWindow::loadProject()
             "Loaded " + QFileInfo(filePath).fileName()
         );
 
-        setWindowTitle(
-            "BioFlow Studio - " + projectSession.projectName
-        );
+        projectModified = false;
+        updateWindowTitle();
         statusLabel->setText(
             "Project loaded: " + projectSession.projectName
+        );
+        statusBar()->showMessage(
+            "Project loaded successfully: " + filePath,
+            7000
         );
         pages->setCurrentIndex(DashboardPage);
 
@@ -4295,6 +4531,8 @@ void MainWindow::populateSampleGroupingTable()
             this,
             [this]()
             {
+                markProjectModified();
+
                 std::size_t controlCount = 0;
                 std::size_t treatmentCount = 0;
 
