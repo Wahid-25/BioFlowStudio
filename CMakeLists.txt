@@ -74,6 +74,11 @@ qt_add_executable(BioFlowStudio
     src/report/HtmlReportGenerator.cpp
     src/report/HtmlReportGenerator.h
 
+    src/session/ProjectSession.cpp
+    src/session/ProjectSession.h
+    src/session/ProjectSerializer.cpp
+    src/session/ProjectSerializer.h
+
     src/quality/QualityReport.cpp
     src/quality/QualityReport.h
     src/quality/DataQualityAnalyzer.h

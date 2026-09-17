@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <QAbstractItemView>
+#include <QAction>
 #include <QApplication>
 #include <QColor>
 #include <QComboBox>
@@ -16,6 +17,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QPixmap>
 #include <QPainter>
@@ -52,6 +55,7 @@
 #include "quality/ExpressionQualityAnalyzer.h"
 #include "quality/SequenceQualityAnalyzer.h"
 #include "report/HtmlReportGenerator.h"
+#include "session/ProjectSerializer.h"
 #include "visualization/PhylogeneticTreeWidget.h"
 #include "visualization/ExpressionHeatmapWidget.h"
 #include "visualization/EnrichmentBarChartWidget.h"
@@ -146,9 +150,39 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionQualityPage());
     pages->addWidget(createExpressionEnrichmentPage());
     pages->addWidget(createWorkflowBuilderPage());
+    pages->addWidget(createProjectHistoryPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
+
+    QMenu* fileMenu = menuBar()->addMenu("File");
+    QAction* openProjectAction = fileMenu->addAction("Open Project...");
+    QAction* saveProjectAction = fileMenu->addAction("Save Project...");
+    fileMenu->addSeparator();
+    QAction* exitAction = fileMenu->addAction("Exit");
+
+    QMenu* viewMenu = menuBar()->addMenu("View");
+    QAction* historyAction = viewMenu->addAction("Analysis History");
+
+    connect(
+        openProjectAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::loadProject
+    );
+    connect(
+        saveProjectAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::saveProject
+    );
+    connect(
+        historyAction,
+        &QAction::triggered,
+        this,
+        &MainWindow::openProjectHistoryPage
+    );
+    connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
     setStyleSheet(
         R"(
@@ -2032,6 +2066,71 @@ QWidget* MainWindow::createWorkflowBuilderPage()
     return page;
 }
 
+QWidget* MainWindow::createProjectHistoryPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(30, 22, 30, 22);
+    layout->setSpacing(10);
+
+    QLabel* title = createPageTitle("Project Analysis History");
+    QLabel* description = createDescription(
+        "A chronological record of imported datasets and completed "
+        "bioinformatics analyses in the current project."
+    );
+
+    projectHistorySummaryLabel = new QLabel("No history entries yet.");
+    projectHistorySummaryLabel->setAlignment(Qt::AlignCenter);
+    projectHistorySummaryLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    projectHistoryTable = new QTableWidget;
+    projectHistoryTable->setColumnCount(5);
+    projectHistoryTable->setHorizontalHeaderLabels(
+        {"Date and Time", "Workspace", "Action", "Status", "Details"}
+    );
+    projectHistoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    projectHistoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    projectHistoryTable->setAlternatingRowColors(true);
+    projectHistoryTable->verticalHeader()->setVisible(false);
+    projectHistoryTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::ResizeToContents
+    );
+    projectHistoryTable->horizontalHeader()->setStretchLastSection(true);
+
+    QPushButton* saveButton = new QPushButton("Save Current Project");
+    QPushButton* backButton = new QPushButton("Back to Dashboard");
+    saveButton->setMinimumHeight(44);
+    backButton->setMinimumHeight(44);
+
+    QHBoxLayout* buttonLayout = new QHBoxLayout;
+    buttonLayout->addWidget(saveButton);
+    buttonLayout->addWidget(backButton);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addWidget(projectHistorySummaryLabel);
+    layout->addWidget(projectHistoryTable, 1);
+    layout->addLayout(buttonLayout);
+
+    connect(
+        saveButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::saveProject
+    );
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToDashboard
+    );
+
+    return page;
+}
+
 void MainWindow::selectPhylogeneticWorkspace()
 {
     currentProject.setWorkspaceType(
@@ -2072,6 +2171,12 @@ void MainWindow::openWorkflowBuilderPage()
 {
     refreshWorkflowNodeStates();
     pages->setCurrentIndex(WorkflowBuilderPage);
+}
+
+void MainWindow::openProjectHistoryPage()
+{
+    refreshProjectHistoryTable();
+    pages->setCurrentIndex(ProjectHistoryPage);
 }
 
 void MainWindow::loadWorkflowTemplate()
@@ -2491,6 +2596,16 @@ void MainWindow::openPhylogeneticQualityPage()
         report
     );
 
+    recordHistory(
+        "Phylogenetic Analysis",
+        "Sequence Quality Control",
+        "Completed",
+        QString("Overall quality status: %1.")
+            .arg(QString::fromStdString(
+                QualityReport::statusName(report.getOverallStatus())
+            ))
+    );
+
     pages->setCurrentIndex(PhylogeneticQualityPage);
 }
 
@@ -2517,6 +2632,16 @@ void MainWindow::openExpressionQualityPage()
         expressionQualityTable,
         expressionQualitySummaryLabel,
         report
+    );
+
+    recordHistory(
+        "Gene Expression Analysis",
+        "Expression Quality Control",
+        "Completed",
+        QString("Overall quality status: %1.")
+            .arg(QString::fromStdString(
+                QualityReport::statusName(report.getOverallStatus())
+            ))
     );
 
     pages->setCurrentIndex(ExpressionQualityPage);
@@ -2585,6 +2710,15 @@ void MainWindow::runFunctionalEnrichmentAnalysis()
 
         resetEnrichmentFilters();
         pages->setCurrentIndex(ExpressionEnrichmentPage);
+
+        recordHistory(
+            "Gene Expression Analysis",
+            "Functional Enrichment",
+            "Completed",
+            QString("Tested %1 significant gene(s); returned %2 pathway result(s).")
+                .arg(static_cast<qulonglong>(significantGenes.size()))
+                .arg(static_cast<qulonglong>(enrichmentResults.size()))
+        );
     }
     catch (const std::exception& error)
     {
@@ -2800,6 +2934,15 @@ void MainWindow::importFastaFiles()
         return;
     }
 
+    loadFastaFiles(filePaths, true);
+}
+
+void MainWindow::loadFastaFiles(
+    const QStringList& filePaths,
+    bool shouldRecordHistory
+)
+{
+
     FastaParser parser;
 
     selectedFastaFiles = filePaths;
@@ -2900,6 +3043,18 @@ void MainWindow::importFastaFiles()
         phylogeneticQualityButton->setEnabled(
             !loadedSequences.empty()
         );
+
+        if (shouldRecordHistory)
+        {
+            recordHistory(
+                "Phylogenetic Analysis",
+                "Import FASTA",
+                "Completed",
+                QString("Loaded %1 sequence(s) from %2 file(s).")
+                    .arg(static_cast<qulonglong>(loadedSequences.size()))
+                    .arg(selectedFastaFiles.size())
+            );
+        }
     }
     catch (const std::exception& error)
     {
@@ -2976,6 +3131,15 @@ void MainWindow::generateDistanceMatrix()
         matrixStatusLabel->setStyleSheet(
             "font-weight: bold;"
             "color: #2D6A4F;"
+        );
+
+        recordHistory(
+            "Phylogenetic Analysis",
+            "Generate Distance Matrix",
+            "Completed",
+            QString("%1 sequence(s) analyzed using %2.")
+                .arg(static_cast<qulonglong>(loadedSequences.size()))
+                .arg(matrixAlignmentMethodBox->currentText())
         );
     }
     catch (const std::exception& error)
@@ -3200,6 +3364,15 @@ void MainWindow::generatePhylogeneticTree()
             "font-weight: bold;"
             "color: #2D6A4F;"
         );
+
+        recordHistory(
+            "Phylogenetic Analysis",
+            "Generate UPGMA Tree",
+            "Completed",
+            QString("Tree built from %1 sequence(s) using %2.")
+                .arg(static_cast<qulonglong>(loadedSequences.size()))
+                .arg(treeAlignmentMethodBox->currentText())
+        );
     }
     catch (const std::exception& error)
     {
@@ -3381,6 +3554,15 @@ void MainWindow::importExpressionFile()
     {
         return;
     }
+
+    loadExpressionFile(filePath, true);
+}
+
+void MainWindow::loadExpressionFile(
+    const QString& filePath,
+    bool shouldRecordHistory
+)
+{
 
     ExpressionParser parser;
     expressionQualityButton->setEnabled(false);
@@ -3569,6 +3751,18 @@ void MainWindow::importExpressionFile()
             "font-weight: bold;"
             "color: #2D6A4F;"
         );
+
+        if (shouldRecordHistory)
+        {
+            recordHistory(
+                "Gene Expression Analysis",
+                "Import Expression Dataset",
+                "Completed",
+                QString("Loaded %1 genes across %2 samples.")
+                    .arg(static_cast<qulonglong>(geneCount))
+                    .arg(static_cast<qulonglong>(sampleCount))
+            );
+        }
     }
     catch (const std::exception& error)
     {
@@ -3606,6 +3800,335 @@ void MainWindow::importExpressionFile()
             QString::fromStdString(
                 error.what()
             )
+        );
+    }
+}
+
+void MainWindow::recordHistory(
+    const QString& workspace,
+    const QString& action,
+    const QString& status,
+    const QString& details
+)
+{
+    projectSession.addHistory(workspace, action, status, details);
+
+    if (projectHistoryTable != nullptr)
+    {
+        refreshProjectHistoryTable();
+    }
+}
+
+void MainWindow::refreshProjectHistoryTable()
+{
+    if (projectHistoryTable == nullptr)
+    {
+        return;
+    }
+
+    const auto& history = projectSession.history;
+    projectHistoryTable->setSortingEnabled(false);
+    projectHistoryTable->clearContents();
+    projectHistoryTable->setRowCount(static_cast<int>(history.size()));
+
+    for (std::size_t displayRow = 0;
+         displayRow < history.size();
+         ++displayRow)
+    {
+        const AnalysisHistoryEntry& entry =
+            history.at(history.size() - displayRow - 1);
+        int row = static_cast<int>(displayRow);
+
+        projectHistoryTable->setItem(
+            row, 0, new QTableWidgetItem(entry.timestamp)
+        );
+        projectHistoryTable->setItem(
+            row, 1, new QTableWidgetItem(entry.workspace)
+        );
+        projectHistoryTable->setItem(
+            row, 2, new QTableWidgetItem(entry.action)
+        );
+
+        QTableWidgetItem* statusItem = new QTableWidgetItem(entry.status);
+        statusItem->setTextAlignment(Qt::AlignCenter);
+
+        if (entry.status.compare("Completed", Qt::CaseInsensitive) == 0)
+        {
+            statusItem->setBackground(QColor("#CDEFD8"));
+            statusItem->setForeground(QColor("#176B35"));
+        }
+        else if (entry.status.compare("Failed", Qt::CaseInsensitive) == 0)
+        {
+            statusItem->setBackground(QColor("#F8D7DA"));
+            statusItem->setForeground(QColor("#9C1C1C"));
+        }
+        else
+        {
+            statusItem->setBackground(QColor("#FFF1C7"));
+            statusItem->setForeground(QColor("#8A5A00"));
+        }
+
+        projectHistoryTable->setItem(row, 3, statusItem);
+        projectHistoryTable->setItem(
+            row, 4, new QTableWidgetItem(entry.details)
+        );
+    }
+
+    projectHistorySummaryLabel->setText(
+        history.empty()
+            ? "No history entries yet."
+            : QString("%1 recorded project event(s) | Newest first")
+                .arg(static_cast<qulonglong>(history.size()))
+    );
+}
+
+void MainWindow::saveProject()
+{
+    QString filePath = currentProjectFile;
+
+    if (filePath.isEmpty())
+    {
+        filePath = QFileDialog::getSaveFileName(
+            this,
+            "Save BioFlow Project",
+            "BioFlow_Project.bioflow",
+            "BioFlow Projects (*.bioflow)"
+        );
+    }
+
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    if (!filePath.endsWith(".bioflow", Qt::CaseInsensitive))
+    {
+        filePath += ".bioflow";
+    }
+
+    projectSession.projectName = QFileInfo(filePath).completeBaseName();
+    projectSession.savedAt = QDateTime::currentDateTime().toString(Qt::ISODate);
+    projectSession.fastaFilePaths = selectedFastaFiles;
+    projectSession.expressionFilePath = selectedExpressionFile;
+    projectSession.matrixMethodIndex = matrixAlignmentMethodBox->currentIndex();
+    projectSession.treeMethodIndex = treeAlignmentMethodBox->currentIndex();
+    projectSession.normalizationMethodIndex =
+        normalizationMethodBox->currentIndex();
+    projectSession.adjustedPValueThreshold = adjustedPThresholdBox->value();
+    projectSession.foldChangeThreshold = foldChangeThresholdBox->value();
+    projectSession.enrichmentPValueThreshold =
+        enrichmentPThresholdBox->value();
+    projectSession.workflowTemplateIndex = workflowTemplateBox->currentIndex();
+    projectSession.sampleGroups.clear();
+
+    if (!sampleGroupBoxes.empty())
+    {
+        for (const QComboBox* groupBox : sampleGroupBoxes)
+        {
+            projectSession.sampleGroups.push_back(groupBox->currentIndex());
+        }
+    }
+    else
+    {
+        for (SampleGroup group : sampleGrouping.getGroups())
+        {
+            projectSession.sampleGroups.push_back(static_cast<int>(group));
+        }
+    }
+
+    try
+    {
+        projectSession.addHistory(
+            "Project",
+            "Save Project",
+            "Completed",
+            "Project saved to " + filePath
+        );
+        ProjectSerializer::save(filePath, projectSession);
+
+        currentProjectFile = filePath;
+        setWindowTitle(
+            "BioFlow Studio - " + projectSession.projectName
+        );
+        refreshProjectHistoryTable();
+        statusLabel->setText(
+            "Project saved: " + QFileInfo(filePath).fileName()
+        );
+
+        QMessageBox::information(
+            this,
+            "Project Saved",
+            "The project, analysis settings and history were saved.\n\n"
+            "Project file: " + filePath
+        );
+    }
+    catch (const std::exception& error)
+    {
+        if (!projectSession.history.empty()
+            && projectSession.history.back().action == "Save Project"
+            && projectSession.history.back().status == "Completed")
+        {
+            projectSession.history.pop_back();
+        }
+
+        recordHistory(
+            "Project",
+            "Save Project",
+            "Failed",
+            QString::fromStdString(error.what())
+        );
+        QMessageBox::critical(
+            this,
+            "Project Save Error",
+            QString::fromStdString(error.what())
+        );
+    }
+}
+
+void MainWindow::loadProject()
+{
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Open BioFlow Project",
+        QString(),
+        "BioFlow Projects (*.bioflow);;JSON Files (*.json);;All Files (*.*)"
+    );
+
+    if (filePath.isEmpty())
+    {
+        return;
+    }
+
+    try
+    {
+        ProjectSession loadedSession = ProjectSerializer::load(filePath);
+        projectSession = loadedSession;
+        currentProjectFile = filePath;
+
+        QStringList existingFastaFiles;
+        QStringList missingFiles;
+
+        for (const QString& fastaPath : projectSession.fastaFilePaths)
+        {
+            if (QFileInfo::exists(fastaPath))
+            {
+                existingFastaFiles.append(fastaPath);
+            }
+            else
+            {
+                missingFiles.append(fastaPath);
+            }
+        }
+
+        if (!existingFastaFiles.isEmpty())
+        {
+            loadFastaFiles(existingFastaFiles, false);
+        }
+
+        if (!projectSession.expressionFilePath.isEmpty())
+        {
+            if (QFileInfo::exists(projectSession.expressionFilePath))
+            {
+                loadExpressionFile(projectSession.expressionFilePath, false);
+            }
+            else
+            {
+                missingFiles.append(projectSession.expressionFilePath);
+            }
+        }
+
+        auto restoreComboIndex = [](QComboBox* box, int index)
+        {
+            if (box != nullptr && index >= 0 && index < box->count())
+            {
+                box->setCurrentIndex(index);
+            }
+        };
+
+        restoreComboIndex(
+            matrixAlignmentMethodBox,
+            projectSession.matrixMethodIndex
+        );
+        restoreComboIndex(
+            treeAlignmentMethodBox,
+            projectSession.treeMethodIndex
+        );
+        restoreComboIndex(
+            normalizationMethodBox,
+            projectSession.normalizationMethodIndex
+        );
+        restoreComboIndex(
+            workflowTemplateBox,
+            projectSession.workflowTemplateIndex
+        );
+
+        adjustedPThresholdBox->setValue(
+            projectSession.adjustedPValueThreshold
+        );
+        foldChangeThresholdBox->setValue(
+            projectSession.foldChangeThreshold
+        );
+        enrichmentPThresholdBox->setValue(
+            projectSession.enrichmentPValueThreshold
+        );
+
+        if (expressionDataset
+            && projectSession.sampleGroups.size()
+                == expressionDataset->getSampleCount())
+        {
+            for (std::size_t index = 0;
+                 index < projectSession.sampleGroups.size();
+                 ++index)
+            {
+                int groupValue = projectSession.sampleGroups.at(index);
+                groupValue = std::clamp(groupValue, 0, 2);
+                sampleGrouping.setGroup(
+                    index,
+                    static_cast<SampleGroup>(groupValue)
+                );
+            }
+
+            populateSampleGroupingTable();
+        }
+
+        loadWorkflowTemplate();
+        recordHistory(
+            "Project",
+            "Open Project",
+            "Completed",
+            "Loaded " + QFileInfo(filePath).fileName()
+        );
+
+        setWindowTitle(
+            "BioFlow Studio - " + projectSession.projectName
+        );
+        statusLabel->setText(
+            "Project loaded: " + projectSession.projectName
+        );
+        pages->setCurrentIndex(DashboardPage);
+
+        QString message =
+            "Project data references, settings and analysis history were "
+            "restored. Re-run analyses to regenerate calculated results.";
+
+        if (!missingFiles.isEmpty())
+        {
+            message += "\n\nThe following source file(s) could not be found:\n- "
+                + missingFiles.join("\n- ");
+        }
+
+        QMessageBox::information(
+            this,
+            "Project Loaded",
+            message
+        );
+    }
+    catch (const std::exception& error)
+    {
+        QMessageBox::critical(
+            this,
+            "Project Load Error",
+            QString::fromStdString(error.what())
         );
     }
 }
@@ -3902,6 +4425,15 @@ void MainWindow::runDifferentialExpressionAnalysis()
 
         resetExpressionFilters();
         pages->setCurrentIndex(ExpressionResultsPage);
+
+        recordHistory(
+            "Gene Expression Analysis",
+            "Differential Expression",
+            "Completed",
+            QString("Analyzed %1 gene(s) using %2 normalization.")
+                .arg(static_cast<qulonglong>(expressionResults.size()))
+                .arg(normalizationMethodBox->currentText())
+        );
     }
     catch (const std::exception& error)
     {

@@ -17,6 +17,7 @@
 #include "phylogenetics/Sequence.h"
 #include "phylogenetics/UPGMATree.h"
 #include "quality/QualityReport.h"
+#include "session/ProjectSession.h"
 
 class QLabel;
 class QListWidget;
@@ -57,6 +58,7 @@ private:
     static constexpr int ExpressionQualityPage = 11;
     static constexpr int ExpressionEnrichmentPage = 12;
     static constexpr int WorkflowBuilderPage = 13;
+    static constexpr int ProjectHistoryPage = 14;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -136,6 +138,11 @@ private:
     QLabel* workflowValidationLabel = nullptr;
     QPushButton* openSelectedWorkflowStepButton = nullptr;
 
+    ProjectSession projectSession;
+    QString currentProjectFile;
+    QTableWidget* projectHistoryTable = nullptr;
+    QLabel* projectHistorySummaryLabel = nullptr;
+
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
     QWidget* createDistanceMatrixPage();
@@ -150,6 +157,7 @@ private:
     QWidget* createExpressionQualityPage();
     QWidget* createExpressionEnrichmentPage();
     QWidget* createWorkflowBuilderPage();
+    QWidget* createProjectHistoryPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -164,6 +172,7 @@ private:
     void openExpressionQualityPage();
     void openExpressionEnrichmentPage();
     void openWorkflowBuilderPage();
+    void openProjectHistoryPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();
@@ -172,6 +181,14 @@ private:
 
     void importFastaFiles();
     void importExpressionFile();
+    void loadFastaFiles(
+        const QStringList& filePaths,
+        bool recordHistory
+    );
+    void loadExpressionFile(
+        const QString& filePath,
+        bool recordHistory
+    );
 
     void generateDistanceMatrix();
     void generatePhylogeneticTree();
@@ -209,6 +226,15 @@ private:
     void loadWorkflowTemplate();
     void refreshWorkflowNodeStates();
     void openSelectedWorkflowStep();
+    void saveProject();
+    void loadProject();
+    void refreshProjectHistoryTable();
+    void recordHistory(
+        const QString& workspace,
+        const QString& action,
+        const QString& status,
+        const QString& details
+    );
     bool saveReportImage(
         QWidget* widget,
         const QString& filePath,
