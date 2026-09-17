@@ -22,6 +22,8 @@ qt_add_executable(BioFlowStudio
     src/visualization/VolcanoPlotWidget.h
     src/visualization/EnrichmentBarChartWidget.cpp
     src/visualization/EnrichmentBarChartWidget.h
+    src/visualization/WorkflowCanvasWidget.cpp
+    src/visualization/WorkflowCanvasWidget.h
     src/phylogenetics/UPGMATree.h
     src/export/PhylogeneticExporter.cpp
     src/export/PhylogeneticExporter.h
@@ -87,6 +89,12 @@ qt_add_executable(BioFlowStudio
     src/workflow/AnalysisStep.h
     src/workflow/Workflow.cpp
     src/workflow/Workflow.h
+    src/workflow/WorkflowNode.cpp
+    src/workflow/WorkflowNode.h
+    src/workflow/WorkflowGraph.cpp
+    src/workflow/WorkflowGraph.h
+    src/workflow/WorkflowTemplateFactory.cpp
+    src/workflow/WorkflowTemplateFactory.h
 
     ui/MainWindow.cpp
     ui/MainWindow.h

@@ -57,6 +57,8 @@
 #include "visualization/EnrichmentBarChartWidget.h"
 #include "visualization/PCAPlotWidget.h"
 #include "visualization/VolcanoPlotWidget.h"
+#include "visualization/WorkflowCanvasWidget.h"
+#include "workflow/WorkflowTemplateFactory.h"
 
 namespace
 {
@@ -143,6 +145,7 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createPhylogeneticQualityPage());
     pages->addWidget(createExpressionQualityPage());
     pages->addWidget(createExpressionEnrichmentPage());
+    pages->addWidget(createWorkflowBuilderPage());
 
     pages->setCurrentIndex(DashboardPage);
     setCentralWidget(pages);
@@ -277,8 +280,12 @@ QWidget* MainWindow::createDashboardPage()
     QPushButton* expressionButton =
         new QPushButton("Gene Expression Analysis");
 
+    QPushButton* workflowButton =
+        new QPushButton("Graphical Workflow Builder");
+
     phylogeneticButton->setMinimumHeight(62);
     expressionButton->setMinimumHeight(62);
+    workflowButton->setMinimumHeight(62);
 
     statusLabel = new QLabel("No workspace selected");
     statusLabel->setObjectName("statusLabel");
@@ -291,6 +298,7 @@ QWidget* MainWindow::createDashboardPage()
     layout->addSpacing(15);
     layout->addWidget(phylogeneticButton);
     layout->addWidget(expressionButton);
+    layout->addWidget(workflowButton);
     layout->addWidget(statusLabel);
     layout->addStretch();
 
@@ -306,6 +314,13 @@ QWidget* MainWindow::createDashboardPage()
         &QPushButton::clicked,
         this,
         &MainWindow::selectGeneExpressionWorkspace
+    );
+
+    connect(
+        workflowButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openWorkflowBuilderPage
     );
 
     return page;
@@ -1776,6 +1791,247 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
     return page;
 }
 
+QWidget* MainWindow::createWorkflowBuilderPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+
+    layout->setContentsMargins(22, 16, 22, 16);
+    layout->setSpacing(8);
+
+    QLabel* title = createPageTitle("Graphical Bioinformatics Workflow Builder");
+    QLabel* description = createDescription(
+        "Load a biological workflow template, drag nodes to rearrange it, "
+        "add custom steps, connect dependencies and validate the workflow."
+    );
+
+    workflowTemplateBox = new QComboBox;
+    workflowTemplateBox->addItem("Gene Expression Workflow");
+    workflowTemplateBox->addItem("Phylogenetic Workflow");
+
+    QPushButton* loadTemplateButton = new QPushButton("Load Template");
+    loadTemplateButton->setMinimumHeight(36);
+
+    workflowNodeTypeBox = new QComboBox;
+    workflowNodeTypeBox->addItems(
+        {"Input Node", "Analysis Node", "Visualization Node", "Output Node"}
+    );
+
+    QPushButton* addNodeButton = new QPushButton("Add Step");
+    QPushButton* connectButton = new QPushButton("Connect Nodes");
+    QPushButton* removeButton = new QPushButton("Remove Selected");
+    QPushButton* validateButton = new QPushButton("Validate Workflow");
+    QPushButton* exportWorkflowButton = new QPushButton("Export Workflow PNG");
+
+    for (QPushButton* button :
+         {addNodeButton, connectButton, removeButton, validateButton,
+          exportWorkflowButton})
+    {
+        button->setMinimumHeight(36);
+    }
+
+    QHBoxLayout* templateLayout = new QHBoxLayout;
+    templateLayout->addWidget(new QLabel("Template:"));
+    templateLayout->addWidget(workflowTemplateBox, 1);
+    templateLayout->addWidget(loadTemplateButton);
+    templateLayout->addSpacing(15);
+    templateLayout->addWidget(new QLabel("New step type:"));
+    templateLayout->addWidget(workflowNodeTypeBox);
+    templateLayout->addWidget(addNodeButton);
+
+    QHBoxLayout* editLayout = new QHBoxLayout;
+    editLayout->addWidget(connectButton);
+    editLayout->addWidget(removeButton);
+    editLayout->addWidget(validateButton);
+    editLayout->addWidget(exportWorkflowButton);
+    editLayout->addStretch();
+
+    workflowCanvas = new WorkflowCanvasWidget;
+
+    workflowSelectionLabel = new QLabel(
+        "Select a workflow node to inspect its biological purpose."
+    );
+    workflowSelectionLabel->setWordWrap(true);
+    workflowSelectionLabel->setStyleSheet(
+        "background-color: white; border: 1px solid #D7E0E8; "
+        "border-radius: 6px; padding: 8px; color: #40566B;"
+    );
+
+    workflowValidationLabel = new QLabel(
+        "Load or edit a workflow, then validate its dependencies."
+    );
+    workflowValidationLabel->setWordWrap(true);
+    workflowValidationLabel->setStyleSheet(
+        "font-weight: bold; color: #40566B;"
+    );
+
+    openSelectedWorkflowStepButton = new QPushButton(
+        "Open Selected Analysis Step"
+    );
+    openSelectedWorkflowStepButton->setMinimumHeight(42);
+    openSelectedWorkflowStepButton->setEnabled(false);
+
+    QPushButton* backButton = new QPushButton("Back to Dashboard");
+    backButton->setMinimumHeight(42);
+
+    QHBoxLayout* bottomLayout = new QHBoxLayout;
+    bottomLayout->addWidget(openSelectedWorkflowStepButton);
+    bottomLayout->addWidget(backButton);
+
+    layout->addWidget(title);
+    layout->addWidget(description);
+    layout->addLayout(templateLayout);
+    layout->addLayout(editLayout);
+    layout->addWidget(workflowCanvas, 1);
+    layout->addWidget(workflowSelectionLabel);
+    layout->addWidget(workflowValidationLabel);
+    layout->addLayout(bottomLayout);
+
+    workflowCanvas->setSelectionChangedCallback(
+        [this](const WorkflowNode* node)
+        {
+            if (node == nullptr)
+            {
+                workflowSelectionLabel->setText(
+                    "Select a workflow node to inspect its biological purpose."
+                );
+                openSelectedWorkflowStepButton->setEnabled(false);
+                return;
+            }
+
+            workflowSelectionLabel->setText(
+                QString("%1 | %2 | Status: %3\n%4")
+                    .arg(QString::fromStdString(node->getName()))
+                    .arg(QString::fromStdString(node->getCategoryName()))
+                    .arg(QString::fromStdString(node->getStateName()))
+                    .arg(QString::fromStdString(node->getDescription()))
+            );
+            openSelectedWorkflowStepButton->setEnabled(true);
+        }
+    );
+
+    workflowCanvas->setGraphChangedCallback(
+        [this]()
+        {
+            workflowValidationLabel->setText(
+                "Workflow modified — validate before using it."
+            );
+            workflowValidationLabel->setStyleSheet(
+                "font-weight: bold; color: #B26A00;"
+            );
+        }
+    );
+
+    workflowCanvas->setMessageCallback(
+        [this](const QString& message)
+        {
+            workflowValidationLabel->setText(message);
+            workflowValidationLabel->setStyleSheet(
+                "font-weight: bold; color: #245C8A;"
+            );
+        }
+    );
+
+    connect(
+        loadTemplateButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::loadWorkflowTemplate
+    );
+
+    connect(
+        addNodeButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            WorkflowNodeKind kind = WorkflowNodeKind::Processing;
+
+            if (workflowNodeTypeBox->currentIndex() == 0)
+            {
+                kind = WorkflowNodeKind::Input;
+            }
+            else if (workflowNodeTypeBox->currentIndex() == 2)
+            {
+                kind = WorkflowNodeKind::Visualization;
+            }
+            else if (workflowNodeTypeBox->currentIndex() == 3)
+            {
+                kind = WorkflowNodeKind::Output;
+            }
+
+            workflowCanvas->addNode(kind);
+        }
+    );
+
+    connect(
+        connectButton,
+        &QPushButton::clicked,
+        this,
+        [this]() { workflowCanvas->beginConnectionMode(); }
+    );
+
+    connect(
+        removeButton,
+        &QPushButton::clicked,
+        this,
+        [this]() { workflowCanvas->removeSelectedNode(); }
+    );
+
+    connect(
+        validateButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            std::string validationMessage;
+            bool valid = workflowCanvas->getGraph().isValid(
+                validationMessage
+            );
+
+            workflowValidationLabel->setText(
+                QString::fromStdString(validationMessage)
+            );
+            workflowValidationLabel->setStyleSheet(
+                valid
+                    ? "font-weight: bold; color: #2D6A4F;"
+                    : "font-weight: bold; color: #B02A37;"
+            );
+        }
+    );
+
+    connect(
+        exportWorkflowButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                workflowCanvas,
+                "bioinformatics_workflow.png",
+                "Export Workflow Diagram"
+            );
+        }
+    );
+
+    connect(
+        openSelectedWorkflowStepButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::openSelectedWorkflowStep
+    );
+
+    connect(
+        backButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::returnToDashboard
+    );
+
+    loadWorkflowTemplate();
+    return page;
+}
+
 void MainWindow::selectPhylogeneticWorkspace()
 {
     currentProject.setWorkspaceType(
@@ -1810,6 +2066,227 @@ void MainWindow::selectGeneExpressionWorkspace()
     pages->setCurrentIndex(
         GeneExpressionPage
     );
+}
+
+void MainWindow::openWorkflowBuilderPage()
+{
+    refreshWorkflowNodeStates();
+    pages->setCurrentIndex(WorkflowBuilderPage);
+}
+
+void MainWindow::loadWorkflowTemplate()
+{
+    WorkflowTemplateType type = workflowTemplateBox->currentIndex() == 1
+        ? WorkflowTemplateType::Phylogenetic
+        : WorkflowTemplateType::GeneExpression;
+
+    workflowCanvas->setGraph(WorkflowTemplateFactory::create(type));
+    refreshWorkflowNodeStates();
+
+    workflowValidationLabel->setText(
+        "Template loaded. Drag nodes to rearrange them or validate the workflow."
+    );
+    workflowValidationLabel->setStyleSheet(
+        "font-weight: bold; color: #2D6A4F;"
+    );
+}
+
+void MainWindow::refreshWorkflowNodeStates()
+{
+    if (workflowCanvas == nullptr || workflowTemplateBox == nullptr)
+    {
+        return;
+    }
+
+    bool expressionWorkflow = workflowTemplateBox->currentIndex() == 0;
+
+    for (const auto& nodePointer : workflowCanvas->getGraph().getNodes())
+    {
+        WorkflowNode* node = nodePointer.get();
+        const std::string& name = node->getName();
+        WorkflowNodeState state = WorkflowNodeState::Pending;
+
+        if (expressionWorkflow)
+        {
+            if (name == "Import Expression Data")
+            {
+                state = expressionDataset
+                    ? WorkflowNodeState::Completed
+                    : WorkflowNodeState::Ready;
+            }
+            else if (name == "Data Quality")
+            {
+                state = expressionDataset
+                    ? WorkflowNodeState::Completed
+                    : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Groups and Normalization")
+            {
+                state = !expressionResults.empty()
+                    ? WorkflowNodeState::Completed
+                    : expressionDataset
+                        ? WorkflowNodeState::Ready
+                        : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Differential Expression")
+            {
+                state = !expressionResults.empty()
+                    ? WorkflowNodeState::Completed
+                    : expressionDataset
+                        ? WorkflowNodeState::Ready
+                        : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Plots and Exploration")
+            {
+                state = !expressionResults.empty()
+                    ? WorkflowNodeState::Completed
+                    : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Pathway Enrichment")
+            {
+                state = !enrichmentResults.empty()
+                    ? WorkflowNodeState::Completed
+                    : !expressionResults.empty()
+                        ? WorkflowNodeState::Ready
+                        : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Export and Report")
+            {
+                state = !expressionResults.empty()
+                    ? WorkflowNodeState::Ready
+                    : WorkflowNodeState::Blocked;
+            }
+        }
+        else
+        {
+            if (name == "Import FASTA")
+            {
+                state = loadedSequences.empty()
+                    ? WorkflowNodeState::Ready
+                    : WorkflowNodeState::Completed;
+            }
+            else if (name == "Sequence Quality")
+            {
+                state = loadedSequences.empty()
+                    ? WorkflowNodeState::Blocked
+                    : WorkflowNodeState::Completed;
+            }
+            else if (name == "Distance Matrix")
+            {
+                state = currentDistanceMatrix.size() > 0
+                    || treeDistanceMatrix.size() > 0
+                    ? WorkflowNodeState::Completed
+                    : loadedSequences.size() >= 2
+                        ? WorkflowNodeState::Ready
+                        : WorkflowNodeState::Blocked;
+            }
+            else if (name == "UPGMA Tree"
+                     || name == "Tree Visualization")
+            {
+                state = !currentTree.isEmpty()
+                    ? WorkflowNodeState::Completed
+                    : loadedSequences.size() >= 2
+                        ? WorkflowNodeState::Ready
+                        : WorkflowNodeState::Blocked;
+            }
+            else if (name == "Export and Report")
+            {
+                state = currentDistanceMatrix.size() > 0
+                    || !currentTree.isEmpty()
+                    ? WorkflowNodeState::Ready
+                    : WorkflowNodeState::Blocked;
+            }
+        }
+
+        node->setState(state);
+    }
+
+    workflowCanvas->update();
+}
+
+void MainWindow::openSelectedWorkflowStep()
+{
+    const WorkflowNode* node = workflowCanvas->getSelectedNode();
+
+    if (node == nullptr)
+    {
+        return;
+    }
+
+    std::string name = node->getName();
+    bool expressionWorkflow = workflowTemplateBox->currentIndex() == 0;
+
+    if (expressionWorkflow)
+    {
+        if (name == "Import Expression Data")
+        {
+            pages->setCurrentIndex(GeneExpressionPage);
+        }
+        else if (name == "Data Quality")
+        {
+            openExpressionQualityPage();
+        }
+        else if (name == "Groups and Normalization"
+                 || name == "Differential Expression")
+        {
+            openExpressionConfigurationPage();
+        }
+        else if (name == "Plots and Exploration"
+                 || name == "Export and Report")
+        {
+            if (expressionResults.empty())
+            {
+                openExpressionConfigurationPage();
+            }
+            else
+            {
+                pages->setCurrentIndex(ExpressionResultsPage);
+            }
+        }
+        else if (name == "Pathway Enrichment")
+        {
+            openExpressionEnrichmentPage();
+        }
+        else
+        {
+            QMessageBox::information(
+                this,
+                "Custom Workflow Step",
+                "This custom node demonstrates editable workflow design. "
+                "Connect it to a concrete analysis class to make it executable."
+            );
+        }
+    }
+    else
+    {
+        if (name == "Import FASTA")
+        {
+            pages->setCurrentIndex(PhylogeneticSetupPage);
+        }
+        else if (name == "Sequence Quality")
+        {
+            openPhylogeneticQualityPage();
+        }
+        else if (name == "Distance Matrix")
+        {
+            openDistanceMatrixPage();
+        }
+        else if (name == "UPGMA Tree"
+                 || name == "Tree Visualization"
+                 || name == "Export and Report")
+        {
+            openPhylogeneticTreePage();
+        }
+        else
+        {
+            QMessageBox::information(
+                this,
+                "Custom Workflow Step",
+                "This custom node is not yet connected to an executable "
+                "phylogenetic analysis component."
+            );
+        }
+    }
 }
 
 void MainWindow::openDistanceMatrixPage()

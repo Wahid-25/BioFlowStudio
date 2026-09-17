@@ -35,6 +35,7 @@ class EnrichmentBarChartWidget;
 class PCAPlotWidget;
 class PhylogeneticTreeWidget;
 class VolcanoPlotWidget;
+class WorkflowCanvasWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -55,6 +56,7 @@ private:
     static constexpr int PhylogeneticQualityPage = 10;
     static constexpr int ExpressionQualityPage = 11;
     static constexpr int ExpressionEnrichmentPage = 12;
+    static constexpr int WorkflowBuilderPage = 13;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
@@ -127,6 +129,13 @@ private:
     QTableWidget* expressionQualityTable = nullptr;
     QLabel* expressionQualitySummaryLabel = nullptr;
 
+    WorkflowCanvasWidget* workflowCanvas = nullptr;
+    QComboBox* workflowTemplateBox = nullptr;
+    QComboBox* workflowNodeTypeBox = nullptr;
+    QLabel* workflowSelectionLabel = nullptr;
+    QLabel* workflowValidationLabel = nullptr;
+    QPushButton* openSelectedWorkflowStepButton = nullptr;
+
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
     QWidget* createDistanceMatrixPage();
@@ -140,6 +149,7 @@ private:
     QWidget* createPhylogeneticQualityPage();
     QWidget* createExpressionQualityPage();
     QWidget* createExpressionEnrichmentPage();
+    QWidget* createWorkflowBuilderPage();
 
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
@@ -153,6 +163,7 @@ private:
     void openPhylogeneticQualityPage();
     void openExpressionQualityPage();
     void openExpressionEnrichmentPage();
+    void openWorkflowBuilderPage();
 
     void returnToDashboard();
     void returnToPhylogeneticSetup();
@@ -195,6 +206,9 @@ private:
     void applyEnrichmentFilters();
     void resetEnrichmentFilters();
     void populateEnrichmentResultsTable();
+    void loadWorkflowTemplate();
+    void refreshWorkflowNodeStates();
+    void openSelectedWorkflowStep();
     bool saveReportImage(
         QWidget* widget,
         const QString& filePath,
