@@ -28,6 +28,7 @@
 #include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStringList>
@@ -786,8 +787,8 @@ QWidget* MainWindow::createPhylogeneticTreePage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(35, 25, 35, 25);
-    layout->setSpacing(9);
+    layout->setContentsMargins(30, 14, 30, 14);
+    layout->setSpacing(6);
 
     QLabel* title =
         createPageTitle(
@@ -817,26 +818,53 @@ QWidget* MainWindow::createPhylogeneticTreePage()
         "Hamming Distance"
     );
 
+    treeAlignmentMethodBox->setMinimumWidth(310);
+
+    QHBoxLayout* methodLayout = new QHBoxLayout;
+    methodLayout->setSpacing(10);
+    methodLayout->addWidget(methodLabel);
+    methodLayout->addWidget(treeAlignmentMethodBox, 1);
+
     QPushButton* generateButton =
-        new QPushButton("Generate UPGMA Tree");
+        new QPushButton("Generate Tree");
 
     QPushButton* exportButton =
-        new QPushButton("Export Newick and PNG");
+        new QPushButton("Export Tree");
 
     QPushButton* reportButton =
-        new QPushButton("Generate HTML Report");
+        new QPushButton("HTML Report");
 
-    generateButton->setMinimumHeight(45);
-    exportButton->setMinimumHeight(45);
-    reportButton->setMinimumHeight(45);
+    generateButton->setObjectName("compactPrimaryButton");
+    exportButton->setObjectName("compactActionButton");
+    reportButton->setObjectName("compactActionButton");
+
+    generateButton->setFixedHeight(34);
+    exportButton->setFixedHeight(34);
+    reportButton->setFixedHeight(34);
+
+    generateButton->setMaximumWidth(170);
+    exportButton->setMaximumWidth(150);
+    reportButton->setMaximumWidth(150);
+
+    generateButton->setToolTip(
+        "Calculate the selected distance matrix and construct a UPGMA tree."
+    );
+    exportButton->setToolTip(
+        "Export the tree in Newick format and as a PNG image."
+    );
+    reportButton->setToolTip(
+        "Generate the complete phylogenetic HTML report."
+    );
 
     QHBoxLayout* actionLayout =
         new QHBoxLayout;
 
     actionLayout->setSpacing(10);
+    actionLayout->addStretch();
     actionLayout->addWidget(generateButton);
     actionLayout->addWidget(exportButton);
     actionLayout->addWidget(reportButton);
+    actionLayout->addStretch();
 
     treeStatusLabel =
         new QLabel("No phylogenetic tree generated");
@@ -850,12 +878,30 @@ QWidget* MainWindow::createPhylogeneticTreePage()
     treeGraphic =
         new PhylogeneticTreeWidget;
 
-    treeGraphic->setMinimumHeight(300);
+    treeGraphic->setMinimumSize(900, 300);
+
+    QScrollArea* treeScrollArea = new QScrollArea;
+    treeScrollArea->setWidget(treeGraphic);
+    treeScrollArea->setWidgetResizable(true);
+    treeScrollArea->setMinimumHeight(220);
+    treeScrollArea->setStyleSheet(
+        "QScrollArea {"
+        "background-color: white;"
+        "border: 1px solid #D7E0E8;"
+        "border-radius: 5px;"
+        "}"
+    );
+
+    QLabel* newickLabel = new QLabel("Newick representation:");
+    newickLabel->setStyleSheet(
+        "font-size: 13px; font-weight: bold; color: #40566B;"
+    );
 
     treeOutput = new QPlainTextEdit;
 
     treeOutput->setReadOnly(true);
-    treeOutput->setMaximumHeight(75);
+    treeOutput->setFixedHeight(58);
+    treeOutput->setLineWrapMode(QPlainTextEdit::NoWrap);
     treeOutput->setPlaceholderText(
         "Newick representation will appear here."
     );
@@ -865,17 +911,23 @@ QWidget* MainWindow::createPhylogeneticTreePage()
             "Back to Phylogenetic Setup"
         );
 
-    backButton->setMinimumHeight(45);
+    backButton->setObjectName("compactNavigationButton");
+    backButton->setFixedHeight(34);
+    backButton->setMaximumWidth(220);
+
+    QHBoxLayout* navigationLayout = new QHBoxLayout;
+    navigationLayout->addWidget(backButton);
+    navigationLayout->addStretch();
 
     layout->addWidget(title);
     layout->addWidget(description);
-    layout->addWidget(methodLabel);
-    layout->addWidget(treeAlignmentMethodBox);
+    layout->addLayout(methodLayout);
     layout->addLayout(actionLayout);
     layout->addWidget(treeStatusLabel);
-    layout->addWidget(treeGraphic, 1);
+    layout->addWidget(treeScrollArea, 1);
+    layout->addWidget(newickLabel);
     layout->addWidget(treeOutput);
-    layout->addWidget(backButton);
+    layout->addLayout(navigationLayout);
 
     connect(
         generateButton,
@@ -3573,6 +3625,12 @@ void MainWindow::generatePhylogeneticTree()
         currentTree.build(
             treeDistanceMatrix
         );
+
+        int requiredTreeHeight = std::max(
+            300,
+            static_cast<int>(loadedSequences.size()) * 42
+        );
+        treeGraphic->setMinimumHeight(requiredTreeHeight);
 
         treeGraphic->setTree(
             &currentTree
