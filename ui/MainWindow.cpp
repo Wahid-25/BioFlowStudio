@@ -330,6 +330,52 @@ MainWindow::MainWindow(QWidget* parent)
             font-size: 15px;
         }
 
+        QMenuBar {
+            background-color: #F4F7FA;
+            color: #203040;
+            border-bottom: 1px solid #D7E0E8;
+            spacing: 4px;
+        }
+
+        QMenuBar::item {
+            background-color: transparent;
+            padding: 7px 14px;
+            margin: 0 2px;
+        }
+
+        QMenuBar::item:selected,
+        QMenuBar::item:pressed {
+            background-color: #E3EBF2;
+            color: #163A5F;
+            border-radius: 4px;
+        }
+
+        QMenu {
+            background-color: white;
+            color: #203040;
+            border: 1px solid #CBD5DF;
+            padding: 6px;
+            min-width: 260px;
+        }
+
+        QMenu::item {
+            background-color: transparent;
+            padding: 8px 58px 8px 14px;
+            min-width: 188px;
+        }
+
+        QMenu::item:selected {
+            background-color: #E3EBF2;
+            color: #163A5F;
+            border-radius: 4px;
+        }
+
+        QMenu::separator {
+            height: 1px;
+            background-color: #D7E0E8;
+            margin: 5px 10px;
+        }
+
         #titleLabel {
             color: #163A5F;
             font-size: 38px;
