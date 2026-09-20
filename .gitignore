@@ -1,6 +1,8 @@
 # CMake build folders
 build/
 cmake-build-*/
+build-release/
+release/
 
 # Compiled C++ files
 *.exe
