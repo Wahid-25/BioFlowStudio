@@ -21,6 +21,7 @@
 
 class QLabel;
 class QListWidget;
+class QButtonGroup;
 class QComboBox;
 class QCloseEvent;
 class QDoubleSpinBox;
@@ -63,10 +64,15 @@ private:
     static constexpr int ExpressionEnrichmentPage = 12;
     static constexpr int WorkflowBuilderPage = 13;
     static constexpr int ProjectHistoryPage = 14;
+    static constexpr int PhylogeneticHeatmapPage = 15;
 
     Project currentProject;
     QStackedWidget* pages = nullptr;
     QLabel* statusLabel = nullptr;
+    QLabel* shellPageTitleLabel = nullptr;
+    QLabel* shellPageSubtitleLabel = nullptr;
+    QPushButton* shellBackButton = nullptr;
+    QButtonGroup* navigationGroup = nullptr;
 
     QListWidget* phylogeneticFileList = nullptr;
     QPushButton* openMatrixButton = nullptr;
@@ -78,6 +84,7 @@ private:
 
     QComboBox* matrixAlignmentMethodBox = nullptr;
     QTableWidget* distanceMatrixTable = nullptr;
+    QTableWidget* distanceHeatmapTable = nullptr;
     QLabel* matrixStatusLabel = nullptr;
     DistanceMatrix currentDistanceMatrix;
 
@@ -151,6 +158,7 @@ private:
     QWidget* createDashboardPage();
     QWidget* createPhylogeneticSetupPage();
     QWidget* createDistanceMatrixPage();
+    QWidget* createPhylogeneticHeatmapPage();
     QWidget* createPhylogeneticTreePage();
     QWidget* createGeneExpressionPage();
     QWidget* createExpressionConfigurationPage();
@@ -164,10 +172,14 @@ private:
     QWidget* createWorkflowBuilderPage();
     QWidget* createProjectHistoryPage();
 
+    QWidget* createApplicationShell();
+    void updateApplicationShell(int pageIndex);
+
     void selectPhylogeneticWorkspace();
     void selectGeneExpressionWorkspace();
 
     void openDistanceMatrixPage();
+    void openPhylogeneticHeatmapPage();
     void openPhylogeneticTreePage();
     void openExpressionConfigurationPage();
     void openExpressionVolcanoPage();

@@ -3,6 +3,7 @@
 #include <QAbstractItemView>
 #include <QAction>
 #include <QApplication>
+#include <QButtonGroup>
 #include <QColor>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -12,6 +13,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -29,6 +31,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStringList>
@@ -99,34 +102,6 @@ private:
     double numericValue;
 };
 
-QLabel* createPageTitle(const QString& text)
-{
-    QLabel* label = new QLabel(text);
-
-    label->setAlignment(Qt::AlignCenter);
-    label->setStyleSheet(
-        "font-size: 30px;"
-        "font-weight: bold;"
-        "color: #163A5F;"
-    );
-
-    return label;
-}
-
-QLabel* createDescription(const QString& text)
-{
-    QLabel* label = new QLabel(text);
-
-    label->setAlignment(Qt::AlignCenter);
-    label->setWordWrap(true);
-    label->setStyleSheet(
-        "color: #40566B;"
-        "font-size: 15px;"
-    );
-
-    return label;
-}
-
 QIcon createBioFlowIcon()
 {
     QPixmap pixmap(64, 64);
@@ -161,6 +136,112 @@ QIcon createBioFlowIcon()
 
     return QIcon(pixmap);
 }
+
+QFrame* createDashboardStatCard(
+    const QString& value,
+    const QString& label,
+    const QString& accent
+)
+{
+    QFrame* card = new QFrame;
+    card->setObjectName("statCard");
+    card->setProperty("accent", accent);
+    card->setFixedHeight(64);
+
+    QVBoxLayout* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(15, 9, 15, 9);
+    layout->setSpacing(0);
+
+    QLabel* valueLabel = new QLabel(value);
+    valueLabel->setObjectName("statValue");
+
+    QLabel* nameLabel = new QLabel(label);
+    nameLabel->setObjectName("statName");
+
+    layout->addWidget(valueLabel);
+    layout->addWidget(nameLabel);
+
+    return card;
+}
+
+QFrame* createWorkspaceCard(
+    const QString& eyebrow,
+    const QString& title,
+    const QString& description,
+    QPushButton*& actionButton
+)
+{
+    QFrame* card = new QFrame;
+    card->setObjectName("workspaceCard");
+    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    card->setMinimumHeight(205);
+    card->setMaximumHeight(225);
+
+    QVBoxLayout* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(18, 16, 18, 16);
+    layout->setSpacing(7);
+
+    QLabel* eyebrowLabel = new QLabel(eyebrow.toUpper());
+    eyebrowLabel->setObjectName("cardEyebrow");
+
+    QLabel* titleLabel = new QLabel(title);
+    titleLabel->setObjectName("cardTitle");
+
+    QLabel* descriptionLabel = new QLabel(description);
+    descriptionLabel->setObjectName("cardDescription");
+    descriptionLabel->setWordWrap(true);
+
+    actionButton = new QPushButton("Open  →");
+    actionButton->setProperty("primary", true);
+    actionButton->setCursor(Qt::PointingHandCursor);
+
+    layout->addWidget(eyebrowLabel);
+    layout->addWidget(titleLabel);
+    layout->addWidget(descriptionLabel);
+    layout->addStretch();
+    layout->addWidget(actionButton, 0, Qt::AlignLeft);
+
+    return card;
+}
+
+void styleDashboardTable(QTableWidget* table)
+{
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setAlternatingRowColors(true);
+    table->verticalHeader()->setVisible(false);
+    table->setStyleSheet(
+        "QHeaderView { background-color: #0F172A; }"
+        "QHeaderView::section {"
+        " background-color: #0F172A; color: #9FB2CE;"
+        " border: 1px solid #334155; padding: 7px; font-weight: 600;"
+        "}"
+        "QTableCornerButton::section {"
+        " background-color: #0F172A; border: 1px solid #334155;"
+        "}"
+    );
+}
+
+void fitEmbeddedHeatmapTable(QWidget* widget)
+{
+    QTableWidget* table = qobject_cast<QTableWidget*>(widget);
+
+    if (table == nullptr)
+    {
+        table = widget->findChild<QTableWidget*>();
+    }
+
+    if (table == nullptr)
+    {
+        return;
+    }
+
+    table->setCornerButtonEnabled(false);
+    table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    table->horizontalHeader()->setStretchLastSection(true);
+    table->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+}
 }
 
 MainWindow::MainWindow(QWidget* parent)
@@ -179,6 +260,7 @@ MainWindow::MainWindow(QWidget* parent)
     setMinimumSize(900, 600);
 
     pages = new QStackedWidget;
+    pages->setObjectName("pageStack");
 
     pages->addWidget(createDashboardPage());
     pages->addWidget(createPhylogeneticSetupPage());
@@ -195,9 +277,10 @@ MainWindow::MainWindow(QWidget* parent)
     pages->addWidget(createExpressionEnrichmentPage());
     pages->addWidget(createWorkflowBuilderPage());
     pages->addWidget(createProjectHistoryPage());
+    pages->addWidget(createPhylogeneticHeatmapPage());
 
     pages->setCurrentIndex(DashboardPage);
-    setCentralWidget(pages);
+    setCentralWidget(createApplicationShell());
 
     QMenu* fileMenu = menuBar()->addMenu("File");
     QAction* openProjectAction = fileMenu->addAction("Open Project...");
@@ -275,6 +358,15 @@ MainWindow::MainWindow(QWidget* parent)
     );
     connect(exitAction, &QAction::triggered, this, &QWidget::close);
 
+    connect(
+        pages,
+        &QStackedWidget::currentChanged,
+        this,
+        &MainWindow::updateApplicationShell
+    );
+
+    updateApplicationShell(DashboardPage);
+
     statusBar()->showMessage(
         "Ready | Open a workspace or load a saved BioFlow project"
     );
@@ -324,16 +416,21 @@ MainWindow::MainWindow(QWidget* parent)
     setStyleSheet(
         R"(
         QWidget {
-            background-color: #F4F7FA;
-            color: #203040;
-            font-family: Arial;
-            font-size: 15px;
+            color: #F8FAFC;
+            font-family: "Outfit", "Segoe UI";
+            font-size: 14px;
+        }
+
+        QMainWindow,
+        QWidget#appRoot,
+        QStackedWidget#pageStack {
+            background-color: #0F172A;
         }
 
         QMenuBar {
-            background-color: #F4F7FA;
-            color: #203040;
-            border-bottom: 1px solid #D7E0E8;
+            background-color: #0F172A;
+            color: #94A3B8;
+            border-bottom: 1px solid #334155;
             spacing: 4px;
         }
 
@@ -345,15 +442,15 @@ MainWindow::MainWindow(QWidget* parent)
 
         QMenuBar::item:selected,
         QMenuBar::item:pressed {
-            background-color: #E3EBF2;
-            color: #163A5F;
-            border-radius: 4px;
+            background-color: #1E293B;
+            color: #2563EB;
+            border-radius: 6px;
         }
 
         QMenu {
-            background-color: white;
-            color: #203040;
-            border: 1px solid #CBD5DF;
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
             padding: 6px;
             min-width: 260px;
         }
@@ -365,66 +462,135 @@ MainWindow::MainWindow(QWidget* parent)
         }
 
         QMenu::item:selected {
-            background-color: #E3EBF2;
-            color: #163A5F;
-            border-radius: 4px;
+            background-color: #334155;
+            color: #F8FAFC;
+            border-radius: 6px;
         }
 
         QMenu::separator {
             height: 1px;
-            background-color: #D7E0E8;
+            background-color: #334155;
             margin: 5px 10px;
         }
 
         #titleLabel {
-            color: #163A5F;
-            font-size: 38px;
-            font-weight: bold;
+            color: #F8FAFC;
+            font-size: 30px;
+            font-weight: 700;
         }
 
         #subtitleLabel {
-            color: #40566B;
-            font-size: 20px;
+            color: #94A3B8;
+            font-size: 15px;
         }
 
         #descriptionLabel {
-            color: #40566B;
-            font-size: 16px;
+            color: #94A3B8;
+            font-size: 14px;
         }
 
         #statusLabel {
-            color: #2D6A4F;
-            font-size: 16px;
-            font-weight: bold;
+            background-color: #064E3B;
+            color: #6EE7B7;
+            border: 1px solid #047857;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 12px;
+        }
+
+        QFrame#appSidebar {
+            background-color: #0F172A;
+            border-right: 1px solid #334155;
+        }
+
+        QFrame#applicationHeader {
+            background-color: #0F172A;
+            border-bottom: 1px solid #334155;
+        }
+
+        QLabel#shellTitle {
+            color: #F8FAFC;
+            font-size: 19px;
+            font-weight: 700;
+        }
+
+        QLabel#shellSubtitle {
+            color: #94A3B8;
+            font-size: 12px;
+        }
+
+        QLabel#brandText {
+            color: #F8FAFC;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        QPushButton#sidebarNavButton {
+            background-color: transparent;
+            color: #94A3B8;
+            border: none;
+            border-radius: 12px;
+            min-width: 48px;
+            max-width: 48px;
+            min-height: 44px;
+            max-height: 44px;
+            padding: 0;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        QPushButton#sidebarNavButton:hover {
+            background-color: #1E293B;
+            color: #60A5FA;
+        }
+
+        QPushButton#sidebarNavButton:checked {
+            background-color: #1E3A5F;
+            color: #60A5FA;
         }
 
         QPushButton {
-            background-color: #163A5F;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: bold;
-            padding: 10px;
+            background-color: #1E293B;
+            color: #CBD5E1;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 9px 14px;
         }
 
         QPushButton:hover {
-            background-color: #245C8A;
+            background-color: #273449;
+            border-color: #475569;
+            color: #60A5FA;
         }
 
         QPushButton:pressed {
-            background-color: #0F2B47;
+            background-color: #1E3A5F;
+        }
+
+        QPushButton[primary="true"] {
+            background-color: #2563EB;
+            color: #FFFFFF;
+            border-color: #2563EB;
+        }
+
+        QPushButton[primary="true"]:hover {
+            background-color: #1D4ED8;
+            border-color: #1D4ED8;
+            color: #FFFFFF;
         }
 
         QPushButton:disabled {
-            background-color: #9AA9B7;
-            color: #E5EBF0;
+            background-color: #334155;
+            color: #64748B;
         }
 
         QPushButton#compactActionButton {
-            background-color: #E7EEF5;
-            color: #163A5F;
-            border: 1px solid #B8C8D6;
+            background-color: #1E293B;
+            color: #CBD5E1;
+            border: 1px solid #334155;
             border-radius: 5px;
             font-size: 13px;
             font-weight: bold;
@@ -432,14 +598,14 @@ MainWindow::MainWindow(QWidget* parent)
         }
 
         QPushButton#compactActionButton:hover {
-            background-color: #D5E4F0;
-            border-color: #7193AF;
+            background-color: #273449;
+            border-color: #475569;
         }
 
         QPushButton#compactPrimaryButton {
-            background-color: #245C8A;
+            background-color: #2563EB;
             color: white;
-            border: 1px solid #245C8A;
+            border: 1px solid #2563EB;
             border-radius: 5px;
             font-size: 13px;
             font-weight: bold;
@@ -447,13 +613,13 @@ MainWindow::MainWindow(QWidget* parent)
         }
 
         QPushButton#compactPrimaryButton:hover {
-            background-color: #163A5F;
+            background-color: #1D4ED8;
         }
 
         QPushButton#compactNavigationButton {
             background-color: transparent;
-            color: #40566B;
-            border: 1px solid #AEBCC8;
+            color: #CBD5E1;
+            border: 1px solid #334155;
             border-radius: 5px;
             font-size: 13px;
             font-weight: bold;
@@ -461,52 +627,496 @@ MainWindow::MainWindow(QWidget* parent)
         }
 
         QPushButton#compactNavigationButton:hover {
-            background-color: #E7EEF5;
-            color: #163A5F;
+            background-color: #1E293B;
+            color: #60A5FA;
+        }
+
+        QFrame#statCard,
+        QFrame#workspaceCard {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 16px;
+        }
+
+        QFrame#workspaceCard:hover {
+            border-color: #3B82F6;
+        }
+
+        QLabel#statValue {
+            color: #F8FAFC;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        QLabel#statName {
+            color: #94A3B8;
+            font-size: 11px;
+        }
+
+        QLabel#cardEyebrow {
+            color: #2563EB;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        QLabel#cardTitle {
+            color: #F8FAFC;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        QLabel#cardDescription {
+            color: #94A3B8;
+            font-size: 12px;
+        }
+
+        QFrame#analysisCard {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 16px;
+        }
+
+        QLabel#panelTitle {
+            color: #F8FAFC;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        QLabel#panelDescription {
+            color: #94A3B8;
+            font-size: 12px;
+        }
+
+        QLabel#panelHint {
+            color: #64748B;
+            font-size: 11px;
+        }
+
+        QLabel#fieldLabel {
+            color: #CBD5E1;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        QLabel#resultStatusBadge {
+            background-color: #0F172A;
+            color: #94A3B8;
+            border: 1px solid #334155;
+            border-radius: 9px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        QPushButton#analysisOptionButton {
+            min-height: 48px;
+            padding: 10px 14px;
+            text-align: left;
+            background-color: #0F172A;
+            color: #CBD5E1;
+            border: 1px solid #334155;
+            border-radius: 10px;
+        }
+
+        QPushButton#analysisOptionButton:hover {
+            background-color: #1E3A5F;
+            color: #F8FAFC;
+            border-color: #3B82F6;
+        }
+
+        QPushButton#analysisOptionButton:disabled {
+            background-color: #172033;
+            color: #64748B;
+            border-color: #334155;
         }
 
         QListWidget {
-            background-color: white;
-            color: #203040;
-            border: 1px solid #D7E0E8;
-            border-radius: 6px;
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            border-radius: 12px;
             padding: 8px;
         }
 
-        QComboBox {
-            background-color: white;
-            color: #203040;
-            border: 1px solid #BCC9D4;
-            border-radius: 5px;
-            padding: 8px;
+        QListWidget::item:selected,
+        QTableWidget::item:selected {
+            background-color: #1D4ED8;
+            color: #FFFFFF;
+        }
+
+        QLineEdit,
+        QComboBox,
+        QDoubleSpinBox {
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 9px;
+        }
+
+        QLineEdit:focus,
+        QComboBox:focus,
+        QDoubleSpinBox:focus {
+            border-color: #2563EB;
+        }
+
+        QComboBox QAbstractItemView {
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            selection-background-color: #1D4ED8;
         }
 
         QTableWidget {
-            background-color: white;
-            alternate-background-color: #EDF3F8;
-            color: #203040;
-            border: 1px solid #D7E0E8;
-            gridline-color: #CBD5DF;
+            background-color: #1E293B;
+            alternate-background-color: #172033;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            gridline-color: #334155;
         }
 
         QHeaderView::section {
-            background-color: #E3EBF2;
-            color: #163A5F;
+            background-color: #0F172A;
+            color: #94A3B8;
             font-weight: bold;
             padding: 6px;
-            border: 1px solid #CBD5DF;
+            border: none;
+            border-bottom: 1px solid #334155;
         }
 
         QPlainTextEdit {
-            background-color: white;
-            color: #203040;
-            border: 1px solid #D7E0E8;
-            border-radius: 5px;
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            border-radius: 12px;
             font-family: Consolas;
             font-size: 13px;
         }
+
+        QToolTip {
+            background-color: #1E293B;
+            color: #F8FAFC;
+            border: 1px solid #334155;
+            padding: 5px;
+        }
+
+        QStatusBar {
+            background-color: #0F172A;
+            color: #94A3B8;
+            border-top: 1px solid #334155;
+        }
+
+        QStatusBar::item {
+            border: none;
+        }
         )"
     );
+}
+
+QWidget* MainWindow::createApplicationShell()
+{
+    QWidget* shell = new QWidget;
+    shell->setObjectName("appRoot");
+
+    QHBoxLayout* shellLayout = new QHBoxLayout(shell);
+    shellLayout->setContentsMargins(0, 0, 0, 0);
+    shellLayout->setSpacing(0);
+
+    QFrame* sidebar = new QFrame;
+    sidebar->setObjectName("appSidebar");
+    sidebar->setFixedWidth(85);
+
+    QVBoxLayout* sidebarLayout = new QVBoxLayout(sidebar);
+    sidebarLayout->setContentsMargins(12, 14, 12, 14);
+    sidebarLayout->setSpacing(8);
+    sidebarLayout->setAlignment(Qt::AlignHCenter);
+
+    QLabel* logoLabel = new QLabel;
+    logoLabel->setPixmap(createBioFlowIcon().pixmap(44, 44));
+    logoLabel->setAlignment(Qt::AlignCenter);
+
+    QLabel* brandLabel = new QLabel("BIOFLOW");
+    brandLabel->setObjectName("brandText");
+    brandLabel->setAlignment(Qt::AlignCenter);
+
+    sidebarLayout->addWidget(logoLabel);
+    sidebarLayout->addWidget(brandLabel);
+    sidebarLayout->addSpacing(12);
+
+    navigationGroup = new QButtonGroup(this);
+    navigationGroup->setExclusive(true);
+
+    auto addNavigationButton = [this, sidebarLayout](
+        const QString& text,
+        const QString& toolTip,
+        int navigationId
+    )
+    {
+        QPushButton* button = new QPushButton(text);
+        button->setObjectName("sidebarNavButton");
+        button->setToolTip(toolTip);
+        button->setCheckable(true);
+        button->setCursor(Qt::PointingHandCursor);
+        navigationGroup->addButton(button, navigationId);
+        sidebarLayout->addWidget(button, 0, Qt::AlignHCenter);
+    };
+
+    addNavigationButton("HOME", "Dashboard", 0);
+    addNavigationButton("DNA", "Phylogenetic Analysis", 1);
+    addNavigationButton("GE", "Gene Expression Analysis", 2);
+    addNavigationButton("FLOW", "Workflow Builder", 3);
+    addNavigationButton("LOG", "Project History", 4);
+
+    sidebarLayout->addStretch();
+
+    QPushButton* helpButton = new QPushButton("?");
+    helpButton->setObjectName("sidebarNavButton");
+    helpButton->setToolTip("About BioFlow Studio");
+    helpButton->setCursor(Qt::PointingHandCursor);
+    sidebarLayout->addWidget(helpButton, 0, Qt::AlignHCenter);
+
+    connect(
+        helpButton,
+        &QPushButton::clicked,
+        this,
+        &MainWindow::showAboutDialog
+    );
+
+    connect(
+        navigationGroup,
+        &QButtonGroup::idClicked,
+        this,
+        [this](int navigationId)
+        {
+            switch (navigationId)
+            {
+                case 0:
+                    returnToDashboard();
+                    break;
+                case 1:
+                    selectPhylogeneticWorkspace();
+                    break;
+                case 2:
+                    selectGeneExpressionWorkspace();
+                    break;
+                case 3:
+                    openWorkflowBuilderPage();
+                    break;
+                case 4:
+                    openProjectHistoryPage();
+                    break;
+                default:
+                    break;
+            }
+        }
+    );
+
+    QWidget* contentArea = new QWidget;
+    QVBoxLayout* contentLayout = new QVBoxLayout(contentArea);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(0);
+
+    QFrame* header = new QFrame;
+    header->setObjectName("applicationHeader");
+    header->setMinimumHeight(72);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(24, 10, 20, 10);
+    headerLayout->setSpacing(12);
+
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setContentsMargins(0, 0, 0, 0);
+    titleLayout->setSpacing(2);
+
+    shellPageTitleLabel = new QLabel("Dashboard");
+    shellPageTitleLabel->setObjectName("shellTitle");
+
+    shellPageSubtitleLabel = new QLabel("Your bioinformatics workspace");
+    shellPageSubtitleLabel->setObjectName("shellSubtitle");
+
+    titleLayout->addWidget(shellPageTitleLabel);
+    titleLayout->addWidget(shellPageSubtitleLabel);
+
+    shellBackButton = new QPushButton("←  Back");
+    shellBackButton->setObjectName("compactNavigationButton");
+    shellBackButton->setCursor(Qt::PointingHandCursor);
+    shellBackButton->setToolTip("Return to the previous analysis screen");
+
+    QPushButton* openButton = new QPushButton("Open project");
+    openButton->setObjectName("compactActionButton");
+    openButton->setCursor(Qt::PointingHandCursor);
+
+    QPushButton* saveButton = new QPushButton("Save project");
+    saveButton->setObjectName("compactPrimaryButton");
+    saveButton->setCursor(Qt::PointingHandCursor);
+
+    connect(openButton, &QPushButton::clicked, this, &MainWindow::loadProject);
+    connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveProject);
+
+    connect(
+        shellBackButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            switch (pages->currentIndex())
+            {
+                case PhylogeneticSetupPage:
+                case GeneExpressionPage:
+                case WorkflowBuilderPage:
+                case ProjectHistoryPage:
+                    returnToDashboard();
+                    break;
+                case PhylogeneticHeatmapPage:
+                    openDistanceMatrixPage();
+                    break;
+                case DistanceMatrixPage:
+                case PhylogeneticTreePage:
+                case PhylogeneticQualityPage:
+                    returnToPhylogeneticSetup();
+                    break;
+                case ExpressionConfigurationPage:
+                case ExpressionQualityPage:
+                    returnToGeneExpressionSetup();
+                    break;
+                case ExpressionResultsPage:
+                    openExpressionConfigurationPage();
+                    break;
+                case ExpressionVolcanoPage:
+                case ExpressionHeatmapPage:
+                case ExpressionPCAPage:
+                case ExpressionEnrichmentPage:
+                    returnToExpressionResults();
+                    break;
+                default:
+                    returnToDashboard();
+                    break;
+            }
+        }
+    );
+
+    headerLayout->addWidget(shellBackButton);
+    headerLayout->addLayout(titleLayout);
+    headerLayout->addStretch();
+    headerLayout->addWidget(openButton);
+    headerLayout->addWidget(saveButton);
+
+    contentLayout->addWidget(header);
+    contentLayout->addWidget(pages, 1);
+
+    shellLayout->addWidget(sidebar);
+    shellLayout->addWidget(contentArea, 1);
+
+    return shell;
+}
+
+void MainWindow::updateApplicationShell(int pageIndex)
+{
+    QString pageTitle = "Dashboard";
+    QString pageSubtitle = "Your bioinformatics workspace";
+    int navigationId = 0;
+
+    switch (pageIndex)
+    {
+        case PhylogeneticSetupPage:
+            pageTitle = "Phylogenetic Analysis";
+            pageSubtitle = "Import and validate biological sequences";
+            navigationId = 1;
+            break;
+        case DistanceMatrixPage:
+            pageTitle = "Distance Matrix";
+            pageSubtitle = "Compare pairwise evolutionary distances";
+            navigationId = 1;
+            break;
+        case PhylogeneticHeatmapPage:
+            pageTitle = "Distance Heatmap";
+            pageSubtitle = "Explore pairwise distance patterns";
+            navigationId = 1;
+            break;
+        case PhylogeneticTreePage:
+            pageTitle = "Phylogenetic Tree";
+            pageSubtitle = "Explore the generated UPGMA tree";
+            navigationId = 1;
+            break;
+        case PhylogeneticQualityPage:
+            pageTitle = "Sequence Quality Control";
+            pageSubtitle = "Review sequence validity and warnings";
+            navigationId = 1;
+            break;
+        case GeneExpressionPage:
+            pageTitle = "Gene Expression";
+            pageSubtitle = "Import an expression matrix for analysis";
+            navigationId = 2;
+            break;
+        case ExpressionConfigurationPage:
+            pageTitle = "Analysis Configuration";
+            pageSubtitle = "Assign sample groups and normalization settings";
+            navigationId = 2;
+            break;
+        case ExpressionResultsPage:
+            pageTitle = "Differential Expression";
+            pageSubtitle = "Filter and inspect significant genes";
+            navigationId = 2;
+            break;
+        case ExpressionVolcanoPage:
+            pageTitle = "Volcano Plot";
+            pageSubtitle = "Explore significance and fold change";
+            navigationId = 2;
+            break;
+        case ExpressionHeatmapPage:
+            pageTitle = "Expression Heatmap";
+            pageSubtitle = "Compare expression patterns across samples";
+            navigationId = 2;
+            break;
+        case ExpressionPCAPage:
+            pageTitle = "Principal Component Analysis";
+            pageSubtitle = "Inspect sample-level variation and clustering";
+            navigationId = 2;
+            break;
+        case ExpressionQualityPage:
+            pageTitle = "Expression Quality Control";
+            pageSubtitle = "Review missing values and dataset integrity";
+            navigationId = 2;
+            break;
+        case ExpressionEnrichmentPage:
+            pageTitle = "Functional Enrichment";
+            pageSubtitle = "Explore pathways associated with significant genes";
+            navigationId = 2;
+            break;
+        case WorkflowBuilderPage:
+            pageTitle = "Workflow Builder";
+            pageSubtitle = "Design and validate reusable analysis pipelines";
+            navigationId = 3;
+            break;
+        case ProjectHistoryPage:
+            pageTitle = "Project History";
+            pageSubtitle = "Review the analysis activity recorded for this project";
+            navigationId = 4;
+            break;
+        default:
+            break;
+    }
+
+    if (shellPageTitleLabel != nullptr)
+    {
+        shellPageTitleLabel->setText(pageTitle);
+    }
+
+    if (shellPageSubtitleLabel != nullptr)
+    {
+        shellPageSubtitleLabel->setText(pageSubtitle);
+    }
+
+    if (shellBackButton != nullptr)
+    {
+        shellBackButton->setVisible(pageIndex != DashboardPage);
+    }
+
+    if (navigationGroup != nullptr && navigationGroup->button(navigationId) != nullptr)
+    {
+        navigationGroup->button(navigationId)->setChecked(true);
+    }
 }
 
 QWidget* MainWindow::createDashboardPage()
@@ -514,54 +1124,68 @@ QWidget* MainWindow::createDashboardPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(90, 60, 90, 60);
-    layout->setSpacing(20);
+    layout->setContentsMargins(28, 20, 28, 18);
+    layout->setSpacing(12);
 
     QLabel* title = new QLabel("BioFlow Studio");
     title->setObjectName("titleLabel");
-    title->setAlignment(Qt::AlignCenter);
+    title->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     QLabel* subtitle = new QLabel(
-        "Object-Oriented Bioinformatics Workflow Platform"
+        "Integrated biological analysis, visualization and reproducible workflow design."
     );
 
     subtitle->setObjectName("subtitleLabel");
-    subtitle->setAlignment(Qt::AlignCenter);
+    subtitle->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-    QLabel* description = new QLabel(
-        "Choose a biological analysis workspace."
+    QHBoxLayout* statsLayout = new QHBoxLayout;
+    statsLayout->setSpacing(12);
+    statsLayout->addWidget(createDashboardStatCard("3", "Analysis workspaces", "blue"));
+    statsLayout->addWidget(createDashboardStatCard("15", "Integrated views", "green"));
+    statsLayout->addWidget(createDashboardStatCard("2", "Supported data types", "purple"));
+    statsLayout->addWidget(createDashboardStatCard("Local", "Private computation", "slate"));
+
+    QPushButton* phylogeneticButton = nullptr;
+    QPushButton* expressionButton = nullptr;
+    QPushButton* workflowButton = nullptr;
+
+    QFrame* phylogeneticCard = createWorkspaceCard(
+        "Sequences",
+        "Phylogenetic Analysis",
+        "Import FASTA sequences, run quality checks, calculate pairwise distances and build a UPGMA tree.",
+        phylogeneticButton
     );
 
-    description->setObjectName("descriptionLabel");
-    description->setAlignment(Qt::AlignCenter);
+    QFrame* expressionCard = createWorkspaceCard(
+        "Expression",
+        "Gene Expression Analysis",
+        "Compare sample groups and explore differential expression using tables, volcano plots, heatmaps and PCA.",
+        expressionButton
+    );
 
-    QPushButton* phylogeneticButton =
-        new QPushButton("Phylogenetic Analysis");
+    QFrame* workflowCard = createWorkspaceCard(
+        "Automation",
+        "Workflow Builder",
+        "Design and validate reusable analysis pipelines through an interactive node-based workflow.",
+        workflowButton
+    );
 
-    QPushButton* expressionButton =
-        new QPushButton("Gene Expression Analysis");
-
-    QPushButton* workflowButton =
-        new QPushButton("Graphical Workflow Builder");
-
-    phylogeneticButton->setMinimumHeight(62);
-    expressionButton->setMinimumHeight(62);
-    workflowButton->setMinimumHeight(62);
+    QHBoxLayout* workspaceLayout = new QHBoxLayout;
+    workspaceLayout->setSpacing(14);
+    workspaceLayout->addWidget(phylogeneticCard, 1);
+    workspaceLayout->addWidget(expressionCard, 1);
+    workspaceLayout->addWidget(workflowCard, 1);
 
     statusLabel = new QLabel("No workspace selected");
     statusLabel->setObjectName("statusLabel");
-    statusLabel->setAlignment(Qt::AlignCenter);
+    statusLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-    layout->addStretch();
     layout->addWidget(title);
     layout->addWidget(subtitle);
-    layout->addWidget(description);
-    layout->addSpacing(15);
-    layout->addWidget(phylogeneticButton);
-    layout->addWidget(expressionButton);
-    layout->addWidget(workflowButton);
-    layout->addWidget(statusLabel);
-    layout->addStretch();
+    layout->addSpacing(2);
+    layout->addLayout(statsLayout);
+    layout->addLayout(workspaceLayout, 1);
+    layout->addWidget(statusLabel, 0, Qt::AlignLeft);
 
     connect(
         phylogeneticButton,
@@ -592,82 +1216,122 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(70, 35, 70, 35);
+    layout->setContentsMargins(28, 22, 28, 24);
     layout->setSpacing(14);
 
-    QLabel* title =
-        createPageTitle("Phylogenetic Analysis");
+    QHBoxLayout* panelLayout = new QHBoxLayout;
+    panelLayout->setSpacing(16);
 
-    QLabel* description = createDescription(
-        "Import one or more FASTA files. After validation, "
-        "choose which phylogenetic analysis to perform."
+    QFrame* datasetCard = new QFrame;
+    datasetCard->setObjectName("analysisCard");
+
+    QVBoxLayout* datasetLayout = new QVBoxLayout(datasetCard);
+    datasetLayout->setContentsMargins(20, 18, 20, 18);
+    datasetLayout->setSpacing(10);
+
+    QHBoxLayout* datasetHeader = new QHBoxLayout;
+
+    QVBoxLayout* datasetTitleLayout = new QVBoxLayout;
+    datasetTitleLayout->setSpacing(2);
+
+    QLabel* datasetTitle = new QLabel("Sequence dataset");
+    datasetTitle->setObjectName("panelTitle");
+
+    QLabel* datasetDescription = new QLabel(
+        "Import FASTA sequences and review every validated record."
     );
+    datasetDescription->setObjectName("panelDescription");
 
-    QPushButton* importButton =
-        new QPushButton("Select FASTA Files");
+    datasetTitleLayout->addWidget(datasetTitle);
+    datasetTitleLayout->addWidget(datasetDescription);
 
-    importButton->setMinimumHeight(50);
+    QPushButton* importButton = new QPushButton("Import FASTA files");
+    importButton->setProperty("primary", true);
+    importButton->setCursor(Qt::PointingHandCursor);
+
+    datasetHeader->addLayout(datasetTitleLayout);
+    datasetHeader->addStretch();
+    datasetHeader->addWidget(importButton);
 
     phylogeneticFileList = new QListWidget;
-    phylogeneticFileList->setMinimumHeight(250);
+    phylogeneticFileList->setMinimumHeight(280);
     phylogeneticFileList->addItem(
         "No FASTA sequences imported."
     );
 
-    QLabel* optionsLabel =
-        new QLabel("Choose an analysis:");
-
-    optionsLabel->setStyleSheet(
-        "font-size: 17px;"
-        "font-weight: bold;"
-        "color: #163A5F;"
+    QLabel* fileHint = new QLabel(
+        "Supported formats: .fasta, .fa, .fna and .faa"
     );
+    fileHint->setObjectName("panelHint");
 
-    optionsLabel->setAlignment(Qt::AlignCenter);
+    datasetLayout->addLayout(datasetHeader);
+    datasetLayout->addWidget(phylogeneticFileList, 1);
+    datasetLayout->addWidget(fileHint);
+
+    QFrame* viewsCard = new QFrame;
+    viewsCard->setObjectName("analysisCard");
+    viewsCard->setMinimumWidth(330);
+    viewsCard->setMaximumWidth(420);
+
+    QVBoxLayout* viewsLayout = new QVBoxLayout(viewsCard);
+    viewsLayout->setContentsMargins(20, 18, 20, 18);
+    viewsLayout->setSpacing(10);
+
+    QLabel* viewsTitle = new QLabel("Analysis views");
+    viewsTitle->setObjectName("panelTitle");
+
+    QLabel* viewsDescription = new QLabel(
+        "Import valid sequences to unlock these analysis views."
+    );
+    viewsDescription->setObjectName("panelDescription");
+    viewsDescription->setWordWrap(true);
+
+    viewsLayout->addWidget(viewsTitle);
+    viewsLayout->addWidget(viewsDescription);
+    viewsLayout->addSpacing(6);
 
     openMatrixButton =
         new QPushButton(
-            "Distance Matrix and Heatmap"
+            "Distance matrix and heatmap  →"
         );
 
     openTreeButton =
         new QPushButton(
-            "Phylogenetic Tree Analysis"
+            "UPGMA phylogenetic tree  →"
         );
 
     phylogeneticQualityButton =
         new QPushButton(
-            "Data Quality Dashboard"
+            "Sequence quality control  →"
         );
 
-    openMatrixButton->setMinimumHeight(58);
-    openTreeButton->setMinimumHeight(58);
-    phylogeneticQualityButton->setMinimumHeight(58);
+    openMatrixButton->setObjectName("analysisOptionButton");
+    openTreeButton->setObjectName("analysisOptionButton");
+    phylogeneticQualityButton->setObjectName("analysisOptionButton");
+
+    openMatrixButton->setCursor(Qt::PointingHandCursor);
+    openTreeButton->setCursor(Qt::PointingHandCursor);
+    phylogeneticQualityButton->setCursor(Qt::PointingHandCursor);
 
     openMatrixButton->setEnabled(false);
     openTreeButton->setEnabled(false);
     phylogeneticQualityButton->setEnabled(false);
 
-    QHBoxLayout* analysisOptions =
-        new QHBoxLayout;
+    viewsLayout->addWidget(phylogeneticQualityButton);
+    viewsLayout->addWidget(openMatrixButton);
+    viewsLayout->addWidget(openTreeButton);
+    viewsLayout->addStretch();
 
-    analysisOptions->setSpacing(12);
-    analysisOptions->addWidget(openMatrixButton);
-    analysisOptions->addWidget(openTreeButton);
-    analysisOptions->addWidget(phylogeneticQualityButton);
+    QLabel* privacyHint = new QLabel(
+        "Analysis runs locally. Your sequences are not uploaded."
+    );
+    privacyHint->setObjectName("panelHint");
+    privacyHint->setWordWrap(true);
+    viewsLayout->addWidget(privacyHint);
 
-    QPushButton* backButton =
-        new QPushButton("Back to Dashboard");
-
-    backButton->setMinimumHeight(45);
-
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(importButton);
-    layout->addWidget(phylogeneticFileList, 1);
-    layout->addWidget(optionsLabel);
-    layout->addLayout(analysisOptions);
-    layout->addWidget(backButton);
+    panelLayout->addWidget(datasetCard, 3);
+    panelLayout->addWidget(viewsCard, 2);
+    layout->addLayout(panelLayout, 1);
 
     connect(
         importButton,
@@ -697,13 +1361,6 @@ QWidget* MainWindow::createPhylogeneticSetupPage()
         &MainWindow::openPhylogeneticQualityPage
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToDashboard
-    );
-
     return page;
 }
 
@@ -712,28 +1369,32 @@ QWidget* MainWindow::createDistanceMatrixPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(35, 25, 35, 25);
+    layout->setContentsMargins(28, 16, 28, 18);
     layout->setSpacing(10);
 
-    QLabel* title =
-        createPageTitle(
-            "Distance Matrix and Heatmap"
-        );
+    QFrame* controlCard = new QFrame;
+    controlCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "Choose a pairwise strategy and calculate "
-        "normalized distances between every sequence."
+    QVBoxLayout* controlLayout = new QVBoxLayout(controlCard);
+    controlLayout->setContentsMargins(18, 12, 18, 12);
+    controlLayout->setSpacing(7);
+
+    QLabel* controlTitle = new QLabel("Matrix controls");
+    controlTitle->setObjectName("panelTitle");
+
+    QLabel* controlDescription = new QLabel(
+        "Choose a pairwise strategy, calculate normalized distances and export reproducible results."
     );
+    controlDescription->setObjectName("panelDescription");
 
-    QLabel* methodLabel =
-        new QLabel("Pairwise distance method:");
+    QHBoxLayout* controlRow = new QHBoxLayout;
+    controlRow->setSpacing(10);
 
-    methodLabel->setStyleSheet(
-        "font-weight: bold;"
-        "color: #163A5F;"
-    );
+    QLabel* methodLabel = new QLabel("Distance method");
+    methodLabel->setObjectName("fieldLabel");
 
     matrixAlignmentMethodBox = new QComboBox;
+    matrixAlignmentMethodBox->setMinimumWidth(270);
 
     matrixAlignmentMethodBox->addItem(
         "Needleman-Wunsch Global Distance"
@@ -743,35 +1404,69 @@ QWidget* MainWindow::createDistanceMatrixPage()
         "Hamming Distance"
     );
 
-    QPushButton* generateButton =
-        new QPushButton("Generate Distance Matrix");
+    QPushButton* generateButton = new QPushButton("Generate matrix");
+    generateButton->setProperty("primary", true);
+    generateButton->setCursor(Qt::PointingHandCursor);
 
     QPushButton* exportButton =
-        new QPushButton("Export CSV and PHYLIP");
+        new QPushButton("Export CSV / PHYLIP");
 
     QPushButton* reportButton =
-        new QPushButton("Generate HTML Report");
+        new QPushButton("HTML report");
 
-    generateButton->setMinimumHeight(45);
-    exportButton->setMinimumHeight(45);
-    reportButton->setMinimumHeight(45);
+    QPushButton* heatmapButton =
+        new QPushButton("Open heatmap  →");
 
-    QHBoxLayout* actionLayout =
-        new QHBoxLayout;
+    heatmapButton->setProperty("primary", true);
 
-    actionLayout->setSpacing(10);
-    actionLayout->addWidget(generateButton);
-    actionLayout->addWidget(exportButton);
-    actionLayout->addWidget(reportButton);
+    exportButton->setCursor(Qt::PointingHandCursor);
+    reportButton->setCursor(Qt::PointingHandCursor);
+    heatmapButton->setCursor(Qt::PointingHandCursor);
+
+    controlRow->addWidget(methodLabel);
+    controlRow->addWidget(matrixAlignmentMethodBox, 1);
+    controlRow->addStretch();
+    controlRow->addWidget(generateButton);
+    controlRow->addWidget(exportButton);
+    controlRow->addWidget(reportButton);
+
+    controlLayout->addWidget(controlTitle);
+    controlLayout->addWidget(controlDescription);
+    controlLayout->addLayout(controlRow);
+
+    QFrame* resultCard = new QFrame;
+    resultCard->setObjectName("analysisCard");
+
+    QVBoxLayout* resultLayout = new QVBoxLayout(resultCard);
+    resultLayout->setContentsMargins(18, 12, 18, 14);
+    resultLayout->setSpacing(7);
+
+    QHBoxLayout* resultHeader = new QHBoxLayout;
+
+    QVBoxLayout* resultTitleLayout = new QVBoxLayout;
+    resultTitleLayout->setSpacing(2);
+
+    QLabel* resultTitle = new QLabel("Pairwise distance matrix");
+    resultTitle->setObjectName("panelTitle");
+
+    QLabel* resultDescription = new QLabel(
+        "Rows show full sequence names; columns use S1, S2 and so on in the same order for a clear, compact comparison."
+    );
+    resultDescription->setObjectName("panelDescription");
+
+    resultTitleLayout->addWidget(resultTitle);
+    resultTitleLayout->addWidget(resultDescription);
 
     matrixStatusLabel =
         new QLabel("No distance matrix generated");
 
+    matrixStatusLabel->setObjectName("resultStatusBadge");
     matrixStatusLabel->setAlignment(Qt::AlignCenter);
-    matrixStatusLabel->setStyleSheet(
-        "font-weight: bold;"
-        "color: #40566B;"
-    );
+
+    resultHeader->addLayout(resultTitleLayout);
+    resultHeader->addStretch();
+    resultHeader->addWidget(heatmapButton, 0, Qt::AlignTop);
+    resultHeader->addWidget(matrixStatusLabel, 0, Qt::AlignTop);
 
     distanceMatrixTable = new QTableWidget;
 
@@ -780,22 +1475,28 @@ QWidget* MainWindow::createDistanceMatrixPage()
     );
 
     distanceMatrixTable->setAlternatingRowColors(true);
+    distanceMatrixTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    distanceMatrixTable->setSelectionBehavior(QAbstractItemView::SelectItems);
 
-    QPushButton* backButton =
-        new QPushButton(
-            "Back to Phylogenetic Setup"
-        );
+    distanceMatrixTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    distanceMatrixTable->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    distanceMatrixTable->verticalHeader()->setDefaultSectionSize(29);
+    distanceMatrixTable->setStyleSheet(
+        "QHeaderView { background-color: #0F172A; }"
+        "QHeaderView::section {"
+        " background-color: #0F172A; color: #9FB2CE;"
+        " border: 1px solid #334155; padding: 6px; font-weight: 600;"
+        "}"
+        "QTableCornerButton::section {"
+        " background-color: #0F172A; border: 1px solid #334155;"
+        "}"
+    );
 
-    backButton->setMinimumHeight(45);
+    resultLayout->addLayout(resultHeader);
+    resultLayout->addWidget(distanceMatrixTable, 1);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(methodLabel);
-    layout->addWidget(matrixAlignmentMethodBox);
-    layout->addLayout(actionLayout);
-    layout->addWidget(matrixStatusLabel);
-    layout->addWidget(distanceMatrixTable, 1);
-    layout->addWidget(backButton);
+    layout->addWidget(controlCard);
+    layout->addWidget(resultCard, 1);
 
     connect(
         generateButton,
@@ -819,10 +1520,97 @@ QWidget* MainWindow::createDistanceMatrixPage()
     );
 
     connect(
-        backButton,
+        heatmapButton,
         &QPushButton::clicked,
         this,
-        &MainWindow::returnToPhylogeneticSetup
+        &MainWindow::openPhylogeneticHeatmapPage
+    );
+
+    return page;
+}
+
+QWidget* MainWindow::createPhylogeneticHeatmapPage()
+{
+    QWidget* page = new QWidget;
+    QVBoxLayout* layout = new QVBoxLayout(page);
+    layout->setContentsMargins(28, 16, 28, 18);
+    layout->setSpacing(10);
+
+    QFrame* heatmapCard = new QFrame;
+    heatmapCard->setObjectName("analysisCard");
+
+    QVBoxLayout* cardLayout = new QVBoxLayout(heatmapCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Pairwise distance heatmap");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
+        "Every coloured cell shows the calculated distance. Column S1 corresponds to the first row, S2 to the second, and so on."
+    );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
+
+    QPushButton* exportButton = new QPushButton("Export heatmap PNG");
+
+    exportButton->setProperty("primary", true);
+
+    exportButton->setCursor(Qt::PointingHandCursor);
+
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(exportButton, 0, Qt::AlignTop);
+
+    QLabel* legend = new QLabel(
+        "GREEN  similar        YELLOW  moderate        RED  distant"
+    );
+    legend->setObjectName("resultStatusBadge");
+    legend->setAlignment(Qt::AlignCenter);
+
+    distanceHeatmapTable = new QTableWidget;
+    distanceHeatmapTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    distanceHeatmapTable->setSelectionMode(QAbstractItemView::NoSelection);
+    distanceHeatmapTable->setFocusPolicy(Qt::NoFocus);
+    distanceHeatmapTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    distanceHeatmapTable->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    distanceHeatmapTable->verticalHeader()->setDefaultSectionSize(38);
+    distanceHeatmapTable->setStyleSheet(
+        "QHeaderView { background-color: #0F172A; }"
+        "QHeaderView::section {"
+        " background-color: #0F172A; color: #9FB2CE;"
+        " border: 1px solid #334155; padding: 6px; font-weight: 600;"
+        "}"
+        "QTableCornerButton::section {"
+        " background-color: #0F172A; border: 1px solid #334155;"
+        "}"
+    );
+
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(legend, 0, Qt::AlignRight);
+    cardLayout->addWidget(distanceHeatmapTable, 1);
+
+    layout->addWidget(heatmapCard, 1);
+
+    connect(
+        exportButton,
+        &QPushButton::clicked,
+        this,
+        [this]()
+        {
+            exportWidgetImage(
+                distanceHeatmapTable,
+                "distance_heatmap.png",
+                "Export Distance Heatmap"
+            );
+        }
     );
 
     return page;
@@ -833,26 +1621,26 @@ QWidget* MainWindow::createPhylogeneticTreePage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 14, 30, 14);
-    layout->setSpacing(6);
+    layout->setContentsMargins(28, 16, 28, 18);
+    layout->setSpacing(10);
 
-    QLabel* title =
-        createPageTitle(
-            "UPGMA Phylogenetic Tree"
-        );
+    QFrame* controlCard = new QFrame;
+    controlCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "The selected distance algorithm is calculated "
-        "automatically before constructing the tree."
+    QVBoxLayout* controlLayout = new QVBoxLayout(controlCard);
+    controlLayout->setContentsMargins(18, 12, 18, 12);
+    controlLayout->setSpacing(7);
+
+    QLabel* controlTitle = new QLabel("Tree controls");
+    controlTitle->setObjectName("panelTitle");
+
+    QLabel* controlDescription = new QLabel(
+        "Select a distance strategy, construct the UPGMA tree and export reproducible results."
     );
+    controlDescription->setObjectName("panelDescription");
 
-    QLabel* methodLabel =
-        new QLabel("Tree distance method:");
-
-    methodLabel->setStyleSheet(
-        "font-weight: bold;"
-        "color: #163A5F;"
-    );
+    QLabel* methodLabel = new QLabel("Distance method");
+    methodLabel->setObjectName("fieldLabel");
 
     treeAlignmentMethodBox = new QComboBox;
 
@@ -864,33 +1652,25 @@ QWidget* MainWindow::createPhylogeneticTreePage()
         "Hamming Distance"
     );
 
-    treeAlignmentMethodBox->setMinimumWidth(310);
+    treeAlignmentMethodBox->setMinimumWidth(270);
 
-    QHBoxLayout* methodLayout = new QHBoxLayout;
-    methodLayout->setSpacing(10);
-    methodLayout->addWidget(methodLabel);
-    methodLayout->addWidget(treeAlignmentMethodBox, 1);
+    QHBoxLayout* controlRow = new QHBoxLayout;
+    controlRow->setSpacing(10);
 
     QPushButton* generateButton =
-        new QPushButton("Generate Tree");
+        new QPushButton("Generate tree");
 
     QPushButton* exportButton =
-        new QPushButton("Export Tree");
+        new QPushButton("Export Newick / PNG");
 
     QPushButton* reportButton =
-        new QPushButton("HTML Report");
+        new QPushButton("HTML report");
 
-    generateButton->setObjectName("compactPrimaryButton");
-    exportButton->setObjectName("compactActionButton");
-    reportButton->setObjectName("compactActionButton");
+    generateButton->setProperty("primary", true);
 
-    generateButton->setFixedHeight(34);
-    exportButton->setFixedHeight(34);
-    reportButton->setFixedHeight(34);
-
-    generateButton->setMaximumWidth(170);
-    exportButton->setMaximumWidth(150);
-    reportButton->setMaximumWidth(150);
+    generateButton->setCursor(Qt::PointingHandCursor);
+    exportButton->setCursor(Qt::PointingHandCursor);
+    reportButton->setCursor(Qt::PointingHandCursor);
 
     generateButton->setToolTip(
         "Calculate the selected distance matrix and construct a UPGMA tree."
@@ -902,78 +1682,117 @@ QWidget* MainWindow::createPhylogeneticTreePage()
         "Generate the complete phylogenetic HTML report."
     );
 
-    QHBoxLayout* actionLayout =
-        new QHBoxLayout;
+    controlRow->addWidget(methodLabel);
+    controlRow->addWidget(treeAlignmentMethodBox, 1);
+    controlRow->addStretch();
+    controlRow->addWidget(generateButton);
+    controlRow->addWidget(exportButton);
+    controlRow->addWidget(reportButton);
 
-    actionLayout->setSpacing(10);
-    actionLayout->addStretch();
-    actionLayout->addWidget(generateButton);
-    actionLayout->addWidget(exportButton);
-    actionLayout->addWidget(reportButton);
-    actionLayout->addStretch();
+    controlLayout->addWidget(controlTitle);
+    controlLayout->addWidget(controlDescription);
+    controlLayout->addLayout(controlRow);
+
+    QFrame* resultCard = new QFrame;
+    resultCard->setObjectName("analysisCard");
+
+    QVBoxLayout* resultLayout = new QVBoxLayout(resultCard);
+    resultLayout->setContentsMargins(18, 12, 18, 14);
+    resultLayout->setSpacing(7);
+
+    QHBoxLayout* resultHeader = new QHBoxLayout;
+
+    QVBoxLayout* resultTitleLayout = new QVBoxLayout;
+    resultTitleLayout->setSpacing(2);
+
+    QLabel* resultTitle = new QLabel("UPGMA tree visualization");
+    resultTitle->setObjectName("panelTitle");
+
+    QLabel* resultDescription = new QLabel(
+        "Branch structure reflects hierarchical clustering from the selected pairwise distances."
+    );
+    resultDescription->setObjectName("panelDescription");
+
+    resultTitleLayout->addWidget(resultTitle);
+    resultTitleLayout->addWidget(resultDescription);
 
     treeStatusLabel =
         new QLabel("No phylogenetic tree generated");
 
+    treeStatusLabel->setObjectName("resultStatusBadge");
     treeStatusLabel->setAlignment(Qt::AlignCenter);
-    treeStatusLabel->setStyleSheet(
-        "font-weight: bold;"
-        "color: #40566B;"
-    );
+
+    resultHeader->addLayout(resultTitleLayout);
+    resultHeader->addStretch();
+    resultHeader->addWidget(treeStatusLabel, 0, Qt::AlignTop);
 
     treeGraphic =
         new PhylogeneticTreeWidget;
 
-    treeGraphic->setMinimumSize(900, 300);
+    treeGraphic->setMinimumSize(660, 250);
+    treeGraphic->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QScrollArea* treeScrollArea = new QScrollArea;
     treeScrollArea->setWidget(treeGraphic);
     treeScrollArea->setWidgetResizable(true);
-    treeScrollArea->setMinimumHeight(220);
+    treeScrollArea->setMinimumHeight(250);
+    treeScrollArea->setFrameShape(QFrame::NoFrame);
     treeScrollArea->setStyleSheet(
         "QScrollArea {"
-        "background-color: white;"
-        "border: 1px solid #D7E0E8;"
-        "border-radius: 5px;"
+        "background-color: #0F172A;"
+        "border: 1px solid #334155;"
+        "border-radius: 8px;"
         "}"
+        "QScrollArea > QWidget > QWidget { background-color: #0F172A; }"
     );
 
-    QLabel* newickLabel = new QLabel("Newick representation:");
-    newickLabel->setStyleSheet(
-        "font-size: 13px; font-weight: bold; color: #40566B;"
+    QFrame* newickPanel = new QFrame;
+    newickPanel->setMinimumWidth(260);
+    newickPanel->setMaximumWidth(360);
+    newickPanel->setStyleSheet(
+        "QFrame {"
+        " background-color: #0F172A;"
+        " border: 1px solid #334155;"
+        " border-radius: 8px;"
+        "}"
+        "QLabel, QPlainTextEdit { border: none; }"
     );
+
+    QVBoxLayout* newickLayout = new QVBoxLayout(newickPanel);
+    newickLayout->setContentsMargins(14, 12, 14, 14);
+    newickLayout->setSpacing(7);
+
+    QLabel* newickLabel = new QLabel("Newick representation");
+    newickLabel->setObjectName("panelTitle");
+
+    QLabel* newickHint = new QLabel(
+        "Machine-readable tree format for downstream tools and reproducible exports."
+    );
+    newickHint->setObjectName("panelHint");
+    newickHint->setWordWrap(true);
 
     treeOutput = new QPlainTextEdit;
 
     treeOutput->setReadOnly(true);
-    treeOutput->setFixedHeight(58);
-    treeOutput->setLineWrapMode(QPlainTextEdit::NoWrap);
+    treeOutput->setLineWrapMode(QPlainTextEdit::WidgetWidth);
     treeOutput->setPlaceholderText(
         "Newick representation will appear here."
     );
 
-    QPushButton* backButton =
-        new QPushButton(
-            "Back to Phylogenetic Setup"
-        );
+    newickLayout->addWidget(newickLabel);
+    newickLayout->addWidget(newickHint);
+    newickLayout->addWidget(treeOutput, 1);
 
-    backButton->setObjectName("compactNavigationButton");
-    backButton->setFixedHeight(34);
-    backButton->setMaximumWidth(220);
+    QHBoxLayout* visualizationLayout = new QHBoxLayout;
+    visualizationLayout->setSpacing(10);
+    visualizationLayout->addWidget(treeScrollArea, 3);
+    visualizationLayout->addWidget(newickPanel, 1);
 
-    QHBoxLayout* navigationLayout = new QHBoxLayout;
-    navigationLayout->addWidget(backButton);
-    navigationLayout->addStretch();
+    resultLayout->addLayout(resultHeader);
+    resultLayout->addLayout(visualizationLayout, 1);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addLayout(methodLayout);
-    layout->addLayout(actionLayout);
-    layout->addWidget(treeStatusLabel);
-    layout->addWidget(treeScrollArea, 1);
-    layout->addWidget(newickLabel);
-    layout->addWidget(treeOutput);
-    layout->addLayout(navigationLayout);
+    layout->addWidget(controlCard);
+    layout->addWidget(resultCard, 1);
 
     connect(
         generateButton,
@@ -996,13 +1815,6 @@ QWidget* MainWindow::createPhylogeneticTreePage()
         &MainWindow::generatePhylogeneticHtmlReport
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToPhylogeneticSetup
-    );
-
     return page;
 }
 
@@ -1011,99 +1823,119 @@ QWidget* MainWindow::createGeneExpressionPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(45, 25, 45, 25);
+    layout->setContentsMargins(28, 16, 28, 18);
     layout->setSpacing(10);
 
-    QLabel* title =
-        createPageTitle(
-            "Gene Expression Analysis"
-        );
+    QHBoxLayout* workspaceLayout = new QHBoxLayout;
+    workspaceLayout->setSpacing(12);
 
-    QLabel* description = createDescription(
-        "Import a CSV or TSV expression dataset. "
-        "Genes must be rows and biological samples "
-        "must be columns."
+    QFrame* datasetCard = new QFrame;
+    datasetCard->setObjectName("analysisCard");
+
+    QVBoxLayout* datasetLayout = new QVBoxLayout(datasetCard);
+    datasetLayout->setContentsMargins(18, 14, 18, 16);
+    datasetLayout->setSpacing(9);
+
+    QHBoxLayout* datasetHeader = new QHBoxLayout;
+    QVBoxLayout* datasetTitleLayout = new QVBoxLayout;
+    datasetTitleLayout->setSpacing(2);
+
+    QLabel* datasetTitle = new QLabel("Expression dataset");
+    datasetTitle->setObjectName("panelTitle");
+
+    QLabel* datasetDescription = new QLabel(
+        "Import a CSV or TSV matrix with genes in rows and biological samples in columns."
     );
+    datasetDescription->setObjectName("panelDescription");
+    datasetDescription->setWordWrap(true);
+
+    datasetTitleLayout->addWidget(datasetTitle);
+    datasetTitleLayout->addWidget(datasetDescription);
 
     QPushButton* importButton =
-        new QPushButton(
-            "Select Expression File"
-        );
+        new QPushButton("Import CSV / TSV");
+    importButton->setProperty("primary", true);
+    importButton->setCursor(Qt::PointingHandCursor);
 
-    importButton->setMinimumHeight(48);
+    datasetHeader->addLayout(datasetTitleLayout, 1);
+    datasetHeader->addWidget(importButton, 0, Qt::AlignTop);
 
     expressionFileLabel =
         new QLabel("No expression file selected");
 
-    expressionFileLabel->setAlignment(
-        Qt::AlignCenter
-    );
-
+    expressionFileLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     expressionFileLabel->setWordWrap(true);
-
-    expressionFileLabel->setStyleSheet(
-        "background-color: white;"
-        "color: #40566B;"
-        "border: 1px solid #D7E0E8;"
-        "border-radius: 6px;"
-        "padding: 10px;"
-    );
+    expressionFileLabel->setObjectName("resultStatusBadge");
 
     expressionSummaryLabel =
         new QLabel(
             "Import a dataset to view its summary."
         );
 
-    expressionSummaryLabel->setAlignment(
-        Qt::AlignCenter
-    );
-
-    expressionSummaryLabel->setStyleSheet(
-        "font-weight: bold;"
-        "color: #40566B;"
-    );
+    expressionSummaryLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    expressionSummaryLabel->setObjectName("panelHint");
 
     expressionPreviewTable =
         new QTableWidget;
 
-    expressionPreviewTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
+    styleDashboardTable(expressionPreviewTable);
+    expressionPreviewTable->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::Stretch
     );
 
-    expressionPreviewTable->setAlternatingRowColors(
-        true
+    datasetLayout->addLayout(datasetHeader);
+    datasetLayout->addWidget(expressionFileLabel);
+    datasetLayout->addWidget(expressionSummaryLabel);
+    datasetLayout->addWidget(expressionPreviewTable, 1);
+
+    QFrame* actionCard = new QFrame;
+    actionCard->setObjectName("analysisCard");
+    actionCard->setMinimumWidth(300);
+    actionCard->setMaximumWidth(390);
+
+    QVBoxLayout* actionLayout = new QVBoxLayout(actionCard);
+    actionLayout->setContentsMargins(18, 14, 18, 16);
+    actionLayout->setSpacing(10);
+
+    QLabel* actionTitle = new QLabel("Analysis workflow");
+    actionTitle->setObjectName("panelTitle");
+
+    QLabel* actionDescription = new QLabel(
+        "Validate the imported matrix, then configure groups, normalization and statistical testing."
     );
+    actionDescription->setObjectName("panelDescription");
+    actionDescription->setWordWrap(true);
 
     configureExpressionButton =
-        new QPushButton(
-            "Configure Differential Expression Analysis"
-        );
-
-    configureExpressionButton->setMinimumHeight(48);
+        new QPushButton("Configure differential expression  →");
+    configureExpressionButton->setObjectName("analysisOptionButton");
     configureExpressionButton->setEnabled(false);
 
     expressionQualityButton =
-        new QPushButton("View Data Quality Dashboard");
-    expressionQualityButton->setMinimumHeight(48);
+        new QPushButton("Expression quality control  →");
+    expressionQualityButton->setObjectName("analysisOptionButton");
     expressionQualityButton->setEnabled(false);
 
-    QHBoxLayout* expressionActionLayout = new QHBoxLayout;
-    expressionActionLayout->addWidget(expressionQualityButton);
-    expressionActionLayout->addWidget(configureExpressionButton);
+    configureExpressionButton->setCursor(Qt::PointingHandCursor);
+    expressionQualityButton->setCursor(Qt::PointingHandCursor);
 
-    QPushButton* backButton =
-        new QPushButton("Back to Dashboard");
+    QLabel* privacyHint = new QLabel(
+        "Analysis runs locally. Expression data is not uploaded."
+    );
+    privacyHint->setObjectName("panelHint");
+    privacyHint->setWordWrap(true);
 
-    backButton->setMinimumHeight(45);
+    actionLayout->addWidget(actionTitle);
+    actionLayout->addWidget(actionDescription);
+    actionLayout->addSpacing(5);
+    actionLayout->addWidget(expressionQualityButton);
+    actionLayout->addWidget(configureExpressionButton);
+    actionLayout->addStretch();
+    actionLayout->addWidget(privacyHint);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(importButton);
-    layout->addWidget(expressionFileLabel);
-    layout->addWidget(expressionSummaryLabel);
-    layout->addWidget(expressionPreviewTable, 1);
-    layout->addLayout(expressionActionLayout);
-    layout->addWidget(backButton);
+    workspaceLayout->addWidget(datasetCard, 3);
+    workspaceLayout->addWidget(actionCard, 2);
+    layout->addLayout(workspaceLayout, 1);
 
     connect(
         importButton,
@@ -1126,13 +1958,6 @@ QWidget* MainWindow::createGeneExpressionPage()
         &MainWindow::openExpressionQualityPage
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToDashboard
-    );
-
     return page;
 }
 
@@ -1141,38 +1966,44 @@ QWidget* MainWindow::createExpressionConfigurationPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(45, 25, 45, 25);
+    layout->setContentsMargins(28, 16, 28, 18);
     layout->setSpacing(10);
 
-    QLabel* title = createPageTitle(
-        "Configure Differential Expression Analysis"
-    );
+    QFrame* configurationCard = new QFrame;
+    configurationCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "Assign each sample to Control or Treatment, choose a "
-        "normalization strategy, and run Welch's independent t-test."
+    QVBoxLayout* cardLayout = new QVBoxLayout(configurationCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Sample groups and normalization");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
+        "Assign Control or Treatment groups, select normalization and run Welch's independent t-test."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     sampleGroupingTable = new QTableWidget;
     sampleGroupingTable->setColumnCount(2);
     sampleGroupingTable->setHorizontalHeaderLabels(
         {"Sample", "Experimental Group"}
     );
-    sampleGroupingTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
-    );
-    sampleGroupingTable->setAlternatingRowColors(true);
+    styleDashboardTable(sampleGroupingTable);
     sampleGroupingTable->horizontalHeader()->setSectionResizeMode(
         QHeaderView::Stretch
     );
-    sampleGroupingTable->verticalHeader()->setVisible(false);
 
-    QLabel* normalizationLabel = new QLabel(
-        "Normalization strategy:"
-    );
-    normalizationLabel->setStyleSheet(
-        "font-weight: bold; color: #163A5F;"
-    );
+    QLabel* normalizationLabel = new QLabel("Normalization strategy");
+    normalizationLabel->setObjectName("fieldLabel");
 
     normalizationMethodBox = new QComboBox;
     normalizationMethodBox->addItems(
@@ -1182,48 +2013,41 @@ QWidget* MainWindow::createExpressionConfigurationPage()
             "Z-score normalization per gene"
         }
     );
-    normalizationMethodBox->setMinimumHeight(40);
 
     groupingStatusLabel = new QLabel(
         "Import a dataset before configuring the analysis."
     );
     groupingStatusLabel->setAlignment(Qt::AlignCenter);
     groupingStatusLabel->setWordWrap(true);
-    groupingStatusLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
-    );
+    groupingStatusLabel->setObjectName("resultStatusBadge");
+
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(groupingStatusLabel, 0, Qt::AlignTop);
 
     QPushButton* runButton = new QPushButton(
-        "Run Differential Expression Analysis"
+        "Run differential expression"
     );
-    runButton->setMinimumHeight(48);
+    runButton->setProperty("primary", true);
+    runButton->setCursor(Qt::PointingHandCursor);
 
-    QPushButton* backButton = new QPushButton(
-        "Back to Expression Dataset"
-    );
-    backButton->setMinimumHeight(44);
+    QHBoxLayout* footerLayout = new QHBoxLayout;
+    footerLayout->setSpacing(10);
+    footerLayout->addWidget(normalizationLabel);
+    footerLayout->addWidget(normalizationMethodBox, 1);
+    footerLayout->addStretch();
+    footerLayout->addWidget(runButton);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(sampleGroupingTable, 1);
-    layout->addWidget(normalizationLabel);
-    layout->addWidget(normalizationMethodBox);
-    layout->addWidget(groupingStatusLabel);
-    layout->addWidget(runButton);
-    layout->addWidget(backButton);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(sampleGroupingTable, 1);
+    cardLayout->addLayout(footerLayout);
+
+    layout->addWidget(configurationCard, 1);
 
     connect(
         runButton,
         &QPushButton::clicked,
         this,
         &MainWindow::runDifferentialExpressionAnalysis
-    );
-
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToGeneExpressionSetup
     );
 
     return page;
@@ -1234,40 +2058,45 @@ QWidget* MainWindow::createExpressionResultsPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(35, 22, 35, 22);
+    layout->setContentsMargins(28, 16, 28, 18);
     layout->setSpacing(10);
 
-    QLabel* title = createPageTitle(
-        "Differential Expression Results"
-    );
+    QFrame* filterCard = new QFrame;
+    filterCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "Genes are classified using adjusted p-value < 0.05 and "
-        "absolute log2 fold change >= 1. Click a column heading to sort."
+    QVBoxLayout* filterCardLayout = new QVBoxLayout(filterCard);
+    filterCardLayout->setContentsMargins(18, 12, 18, 12);
+    filterCardLayout->setSpacing(7);
+
+    QLabel* filterTitle = new QLabel("Result filters");
+    filterTitle->setObjectName("panelTitle");
+
+    QLabel* filterDescription = new QLabel(
+        "Search, classify and prioritize genes using statistical and fold-change thresholds."
     );
+    filterDescription->setObjectName("panelDescription");
 
     expressionResultsSummaryLabel = new QLabel(
         "Run an analysis to generate results."
     );
-    expressionResultsSummaryLabel->setAlignment(Qt::AlignCenter);
-    expressionResultsSummaryLabel->setWordWrap(true);
-    expressionResultsSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
+    expressionResultsSummaryLabel->setAlignment(
+        Qt::AlignLeft | Qt::AlignVCenter
     );
+    expressionResultsSummaryLabel->setWordWrap(true);
+    expressionResultsSummaryLabel->setObjectName("resultStatusBadge");
 
-    QGridLayout* filterLayout = new QGridLayout;
-    filterLayout->setHorizontalSpacing(10);
-    filterLayout->setVerticalSpacing(7);
+    QHBoxLayout* filterLayout = new QHBoxLayout;
+    filterLayout->setSpacing(10);
 
     QLabel* searchLabel = new QLabel("Search gene:");
-    searchLabel->setStyleSheet("font-weight: bold;");
+    searchLabel->setObjectName("fieldLabel");
 
     geneSearchBox = new QLineEdit;
     geneSearchBox->setPlaceholderText("Example: TP53");
     geneSearchBox->setClearButtonEnabled(true);
 
     QLabel* regulationLabel = new QLabel("Regulation:");
-    regulationLabel->setStyleSheet("font-weight: bold;");
+    regulationLabel->setObjectName("fieldLabel");
 
     regulationFilterBox = new QComboBox;
     regulationFilterBox->addItems(
@@ -1280,7 +2109,7 @@ QWidget* MainWindow::createExpressionResultsPage()
     );
 
     QLabel* maximumLabel = new QLabel("Display:");
-    maximumLabel->setStyleSheet("font-weight: bold;");
+    maximumLabel->setObjectName("fieldLabel");
 
     maximumResultsBox = new QComboBox;
     maximumResultsBox->addItem("All results", 0);
@@ -1289,7 +2118,7 @@ QWidget* MainWindow::createExpressionResultsPage()
     maximumResultsBox->addItem("Top 50", 50);
 
     QLabel* pValueLabel = new QLabel("Adjusted p-value <=");
-    pValueLabel->setStyleSheet("font-weight: bold;");
+    pValueLabel->setObjectName("fieldLabel");
 
     adjustedPThresholdBox = new QDoubleSpinBox;
     adjustedPThresholdBox->setRange(0.000001, 1.0);
@@ -1298,7 +2127,7 @@ QWidget* MainWindow::createExpressionResultsPage()
     adjustedPThresholdBox->setValue(0.05);
 
     QLabel* foldChangeLabel = new QLabel("Minimum |log2 FC|:");
-    foldChangeLabel->setStyleSheet("font-weight: bold;");
+    foldChangeLabel->setObjectName("fieldLabel");
 
     foldChangeThresholdBox = new QDoubleSpinBox;
     foldChangeThresholdBox->setRange(0.0, 20.0);
@@ -1310,29 +2139,73 @@ QWidget* MainWindow::createExpressionResultsPage()
         "Reset Filters"
     );
     resetFiltersButton->setObjectName("compactActionButton");
-    resetFiltersButton->setFixedHeight(34);
 
     expressionFilterSummaryLabel = new QLabel(
         "Run an analysis to enable interactive filtering."
     );
     expressionFilterSummaryLabel->setAlignment(Qt::AlignCenter);
     expressionFilterSummaryLabel->setWordWrap(true);
-    expressionFilterSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
-    );
+    expressionFilterSummaryLabel->setObjectName("panelHint");
 
-    filterLayout->addWidget(searchLabel, 0, 0);
-    filterLayout->addWidget(geneSearchBox, 0, 1);
-    filterLayout->addWidget(regulationLabel, 0, 2);
-    filterLayout->addWidget(regulationFilterBox, 0, 3);
-    filterLayout->addWidget(maximumLabel, 0, 4);
-    filterLayout->addWidget(maximumResultsBox, 0, 5);
-    filterLayout->addWidget(pValueLabel, 1, 0);
-    filterLayout->addWidget(adjustedPThresholdBox, 1, 1);
-    filterLayout->addWidget(foldChangeLabel, 1, 2);
-    filterLayout->addWidget(foldChangeThresholdBox, 1, 3);
-    filterLayout->addWidget(resetFiltersButton, 1, 4, 1, 2);
-    filterLayout->addWidget(expressionFilterSummaryLabel, 2, 0, 1, 6);
+    QVBoxLayout* searchField = new QVBoxLayout;
+    searchField->setSpacing(4);
+    searchField->addWidget(searchLabel);
+    searchField->addWidget(geneSearchBox);
+
+    QVBoxLayout* regulationField = new QVBoxLayout;
+    regulationField->setSpacing(4);
+    regulationField->addWidget(regulationLabel);
+    regulationField->addWidget(regulationFilterBox);
+
+    QVBoxLayout* pValueField = new QVBoxLayout;
+    pValueField->setSpacing(4);
+    pValueField->addWidget(pValueLabel);
+    pValueField->addWidget(adjustedPThresholdBox);
+
+    QVBoxLayout* foldChangeField = new QVBoxLayout;
+    foldChangeField->setSpacing(4);
+    foldChangeField->addWidget(foldChangeLabel);
+    foldChangeField->addWidget(foldChangeThresholdBox);
+
+    QVBoxLayout* displayField = new QVBoxLayout;
+    displayField->setSpacing(4);
+    displayField->addWidget(maximumLabel);
+    displayField->addWidget(maximumResultsBox);
+
+    filterLayout->addLayout(searchField, 2);
+    filterLayout->addLayout(regulationField, 1);
+    filterLayout->addLayout(pValueField, 1);
+    filterLayout->addLayout(foldChangeField, 1);
+    filterLayout->addLayout(displayField, 1);
+    filterLayout->addWidget(resetFiltersButton, 0, Qt::AlignBottom);
+
+    filterCardLayout->addWidget(filterTitle);
+    filterCardLayout->addWidget(filterDescription);
+    filterCardLayout->addLayout(filterLayout);
+    filterCardLayout->addWidget(expressionFilterSummaryLabel);
+
+    QFrame* resultCard = new QFrame;
+    resultCard->setObjectName("analysisCard");
+
+    QVBoxLayout* resultCardLayout = new QVBoxLayout(resultCard);
+    resultCardLayout->setContentsMargins(18, 12, 18, 14);
+    resultCardLayout->setSpacing(7);
+
+    QHBoxLayout* resultHeader = new QHBoxLayout;
+
+    QVBoxLayout* resultTitleLayout = new QVBoxLayout;
+    resultTitleLayout->setSpacing(2);
+
+    QLabel* resultTitle = new QLabel("Differential expression table");
+    resultTitle->setObjectName("panelTitle");
+
+    QLabel* resultDescription = new QLabel(
+        "Click a column heading to sort genes; adjusted p-values use Benjamini-Hochberg correction."
+    );
+    resultDescription->setObjectName("panelDescription");
+
+    resultTitleLayout->addWidget(resultTitle);
+    resultTitleLayout->addWidget(resultDescription);
 
     expressionResultsTable = new QTableWidget;
     expressionResultsTable->setColumnCount(7);
@@ -1347,63 +2220,54 @@ QWidget* MainWindow::createExpressionResultsPage()
             "Regulation"
         }
     );
-    expressionResultsTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
-    );
-    expressionResultsTable->setSelectionBehavior(
-        QAbstractItemView::SelectRows
-    );
-    expressionResultsTable->setAlternatingRowColors(true);
-    expressionResultsTable->verticalHeader()->setVisible(false);
+    styleDashboardTable(expressionResultsTable);
     expressionResultsTable->horizontalHeader()->setSectionResizeMode(
-        QHeaderView::ResizeToContents
+        0, QHeaderView::ResizeToContents
     );
-    expressionResultsTable->horizontalHeader()->setStretchLastSection(true);
-
-    QPushButton* backButton = new QPushButton(
-        "Back to Analysis Configuration"
-    );
-    backButton->setObjectName("compactNavigationButton");
-    backButton->setFixedHeight(34);
-    backButton->setMaximumWidth(235);
+    for (int column = 1; column < 7; ++column)
+    {
+        expressionResultsTable->horizontalHeader()->setSectionResizeMode(
+            column, QHeaderView::Stretch
+        );
+    }
 
     QPushButton* volcanoButton = new QPushButton(
-        "Volcano Plot"
+        "Volcano"
     );
     volcanoButton->setToolTip(
         "Explore fold change and statistical significance interactively."
     );
 
     QPushButton* heatmapButton = new QPushButton(
-        "Expression Heatmap"
+        "Heatmap"
     );
     heatmapButton->setToolTip(
         "Compare relative expression patterns across samples."
     );
 
     QPushButton* pcaButton = new QPushButton(
-        "PCA Sample Plot"
+        "PCA"
     );
     pcaButton->setToolTip(
         "Inspect sample clustering using principal component analysis."
     );
 
     QPushButton* enrichmentButton = new QPushButton(
-        "Pathway Enrichment"
+        "Enrichment"
     );
     enrichmentButton->setToolTip(
         "Analyze enriched biological functions and pathways."
     );
 
     QPushButton* exportTablesButton = new QPushButton(
-        "Export Tables"
+        "Export tables"
     );
     exportTablesButton->setToolTip(
         "Export differential-expression tables and analysis summary."
     );
 
     QPushButton* reportButton = new QPushButton(
-        "HTML Report"
+        "HTML report"
     );
     reportButton->setToolTip(
         "Generate the complete interactive analysis report."
@@ -1419,26 +2283,16 @@ QWidget* MainWindow::createExpressionResultsPage()
     for (QPushButton* button : explorationButtons)
     {
         button->setObjectName("compactActionButton");
-        button->setFixedHeight(34);
-        button->setMaximumWidth(175);
+        button->setCursor(Qt::PointingHandCursor);
     }
 
     exportTablesButton->setObjectName("compactPrimaryButton");
     reportButton->setObjectName("compactPrimaryButton");
-    exportTablesButton->setFixedHeight(34);
-    reportButton->setFixedHeight(34);
-    exportTablesButton->setMaximumWidth(145);
-    reportButton->setMaximumWidth(145);
+    exportTablesButton->setCursor(Qt::PointingHandCursor);
+    reportButton->setCursor(Qt::PointingHandCursor);
 
-    QLabel* exploreLabel = new QLabel("Explore results:");
-    exploreLabel->setStyleSheet(
-        "font-size: 13px; font-weight: bold; color: #40566B;"
-    );
-
-    QLabel* outputLabel = new QLabel("Output:");
-    outputLabel->setStyleSheet(
-        "font-size: 13px; font-weight: bold; color: #40566B;"
-    );
+    QLabel* exploreLabel = new QLabel("Explore");
+    exploreLabel->setObjectName("fieldLabel");
 
     QHBoxLayout* explorationLayout = new QHBoxLayout;
     explorationLayout->setSpacing(7);
@@ -1449,21 +2303,19 @@ QWidget* MainWindow::createExpressionResultsPage()
     explorationLayout->addWidget(enrichmentButton);
     explorationLayout->addStretch();
 
-    QHBoxLayout* resultActionLayout = new QHBoxLayout;
-    resultActionLayout->setSpacing(7);
-    resultActionLayout->addWidget(backButton);
-    resultActionLayout->addStretch();
-    resultActionLayout->addWidget(outputLabel);
-    resultActionLayout->addWidget(exportTablesButton);
-    resultActionLayout->addWidget(reportButton);
+    resultHeader->addLayout(resultTitleLayout, 1);
+    resultHeader->addWidget(exportTablesButton, 0, Qt::AlignTop);
+    resultHeader->addWidget(reportButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(expressionResultsSummaryLabel);
-    layout->addLayout(filterLayout);
-    layout->addWidget(expressionResultsTable, 1);
-    layout->addLayout(explorationLayout);
-    layout->addLayout(resultActionLayout);
+    resultCardLayout->addLayout(resultHeader);
+    resultCardLayout->addWidget(
+        expressionResultsSummaryLabel
+    );
+    resultCardLayout->addWidget(expressionResultsTable, 1);
+    resultCardLayout->addLayout(explorationLayout);
+
+    layout->addWidget(filterCard);
+    layout->addWidget(resultCard, 1);
 
     connect(
         geneSearchBox,
@@ -1549,13 +2401,6 @@ QWidget* MainWindow::createExpressionResultsPage()
         &MainWindow::generateExpressionHtmlReport
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::openExpressionConfigurationPage
-    );
-
     return page;
 }
 
@@ -1564,45 +2409,54 @@ QWidget* MainWindow::createExpressionVolcanoPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 20, 30, 20);
-    layout->setSpacing(10);
+    layout->setContentsMargins(28, 16, 28, 18);
 
-    QLabel* title = createPageTitle(
-        "Interactive Volcano Plot"
-    );
+    QFrame* plotCard = new QFrame;
+    plotCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
+    QVBoxLayout* cardLayout = new QVBoxLayout(plotCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Interactive volcano plot");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
         "Green points are upregulated, red points are downregulated, "
-        "and grey points are not significant. Hover over a point to "
-        "see its gene name and values. Drag a rectangle to zoom."
+        "and grey points are not significant. Hover for gene details and drag to zoom."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     volcanoPlotWidget = new VolcanoPlotWidget;
 
     QPushButton* resetZoomButton = new QPushButton(
-        "Reset Plot Zoom"
+        "Reset zoom"
     );
-    resetZoomButton->setMinimumHeight(42);
 
     QPushButton* exportButton = new QPushButton(
-        "Export Volcano Plot PNG"
+        "Export PNG"
     );
-    exportButton->setMinimumHeight(42);
 
-    QPushButton* backButton = new QPushButton(
-        "Back to Differential Expression Results"
-    );
-    backButton->setMinimumHeight(44);
+    resetZoomButton->setObjectName("compactActionButton");
+    exportButton->setProperty("primary", true);
+    resetZoomButton->setCursor(Qt::PointingHandCursor);
+    exportButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout;
-    buttonLayout->addWidget(resetZoomButton);
-    buttonLayout->addWidget(exportButton);
-    buttonLayout->addWidget(backButton);
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(resetZoomButton, 0, Qt::AlignTop);
+    headerLayout->addWidget(exportButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(volcanoPlotWidget, 1);
-    layout->addLayout(buttonLayout);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(volcanoPlotWidget, 1);
+    layout->addWidget(plotCard, 1);
 
     connect(
         resetZoomButton,
@@ -1628,13 +2482,6 @@ QWidget* MainWindow::createExpressionVolcanoPage()
         }
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToExpressionResults
-    );
-
     return page;
 }
 
@@ -1643,31 +2490,42 @@ QWidget* MainWindow::createExpressionHeatmapPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(25, 18, 25, 18);
-    layout->setSpacing(9);
+    layout->setContentsMargins(28, 16, 28, 18);
 
-    QLabel* title = createPageTitle(
-        "Gene-Expression Heatmap"
-    );
+    QFrame* heatmapCard = new QFrame;
+    heatmapCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
+    QVBoxLayout* cardLayout = new QVBoxLayout(heatmapCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(8);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Gene-expression heatmap");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
         "The most statistically important genes are ordered by adjusted "
-        "p-value. Colours are calculated independently for each gene so "
-        "that its relative expression pattern can be compared across samples."
+        "p-value; row-wise colours compare relative expression across samples."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     expressionHeatmapSummaryLabel = new QLabel(
         "Run an analysis to generate a heatmap."
     );
-    expressionHeatmapSummaryLabel->setAlignment(Qt::AlignCenter);
-    expressionHeatmapSummaryLabel->setWordWrap(true);
-    expressionHeatmapSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
+    expressionHeatmapSummaryLabel->setAlignment(
+        Qt::AlignLeft | Qt::AlignVCenter
     );
+    expressionHeatmapSummaryLabel->setWordWrap(true);
+    expressionHeatmapSummaryLabel->setObjectName("resultStatusBadge");
 
     QHBoxLayout* legendLayout = new QHBoxLayout;
-    legendLayout->addStretch();
-
     QLabel* lowLabel = new QLabel("  Lower expression  ");
     lowLabel->setAlignment(Qt::AlignCenter);
     lowLabel->setStyleSheet(
@@ -1693,27 +2551,33 @@ QWidget* MainWindow::createExpressionHeatmapPage()
     legendLayout->addStretch();
 
     expressionHeatmapWidget = new ExpressionHeatmapWidget;
-
-    QPushButton* backButton = new QPushButton(
-        "Back to Differential Expression Results"
+    expressionHeatmapWidget->setStyleSheet(
+        "QHeaderView { background-color: #0F172A; }"
+        "QHeaderView::section {"
+        " background-color: #0F172A; color: #9FB2CE;"
+        " border: 1px solid #334155; padding: 6px; font-weight: 600;"
+        "}"
+        "QTableCornerButton::section {"
+        " background-color: #0F172A; border: 1px solid #334155;"
+        "}"
+        "QTableView { background-color: #1E293B; }"
     );
-    backButton->setMinimumHeight(44);
+    fitEmbeddedHeatmapTable(expressionHeatmapWidget);
 
     QPushButton* exportButton = new QPushButton(
-        "Export Heatmap PNG"
+        "Export PNG"
     );
-    exportButton->setMinimumHeight(44);
+    exportButton->setProperty("primary", true);
+    exportButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout;
-    buttonLayout->addWidget(exportButton);
-    buttonLayout->addWidget(backButton);
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(exportButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(expressionHeatmapSummaryLabel);
-    layout->addLayout(legendLayout);
-    layout->addWidget(expressionHeatmapWidget, 1);
-    layout->addLayout(buttonLayout);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(expressionHeatmapSummaryLabel);
+    cardLayout->addLayout(legendLayout);
+    cardLayout->addWidget(expressionHeatmapWidget, 1);
+    layout->addWidget(heatmapCard, 1);
 
     connect(
         exportButton,
@@ -1729,13 +2593,6 @@ QWidget* MainWindow::createExpressionHeatmapPage()
         }
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToExpressionResults
-    );
-
     return page;
 }
 
@@ -1744,55 +2601,62 @@ QWidget* MainWindow::createExpressionPCAPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 20, 30, 20);
-    layout->setSpacing(10);
+    layout->setContentsMargins(28, 16, 28, 18);
 
-    QLabel* title = createPageTitle(
-        "PCA Sample-Clustering Plot"
-    );
+    QFrame* pcaCard = new QFrame;
+    pcaCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
+    QVBoxLayout* cardLayout = new QVBoxLayout(pcaCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("PCA sample clustering");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
         "Each point represents one biological sample. Samples positioned "
-        "near each other have similar overall gene-expression profiles. "
-        "Hover over a point to identify the sample."
+        "near each other have similar overall expression profiles. Hover for sample details."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     pcaSummaryLabel = new QLabel(
         "Run an analysis to calculate PCA."
     );
     pcaSummaryLabel->setAlignment(Qt::AlignCenter);
     pcaSummaryLabel->setWordWrap(true);
-    pcaSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
-    );
+    pcaSummaryLabel->setObjectName("resultStatusBadge");
 
     pcaPlotWidget = new PCAPlotWidget;
 
     QPushButton* resetZoomButton = new QPushButton(
-        "Reset Plot Zoom"
+        "Reset zoom"
     );
-    resetZoomButton->setMinimumHeight(42);
 
     QPushButton* exportButton = new QPushButton(
-        "Export PCA Plot PNG"
+        "Export PNG"
     );
-    exportButton->setMinimumHeight(42);
 
-    QPushButton* backButton = new QPushButton(
-        "Back to Differential Expression Results"
-    );
-    backButton->setMinimumHeight(44);
+    resetZoomButton->setObjectName("compactActionButton");
+    exportButton->setProperty("primary", true);
+    resetZoomButton->setCursor(Qt::PointingHandCursor);
+    exportButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout;
-    buttonLayout->addWidget(resetZoomButton);
-    buttonLayout->addWidget(exportButton);
-    buttonLayout->addWidget(backButton);
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(resetZoomButton, 0, Qt::AlignTop);
+    headerLayout->addWidget(exportButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(pcaSummaryLabel);
-    layout->addWidget(pcaPlotWidget, 1);
-    layout->addLayout(buttonLayout);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(pcaSummaryLabel, 0, Qt::AlignRight);
+    cardLayout->addWidget(pcaPlotWidget, 1);
+    layout->addWidget(pcaCard, 1);
 
     connect(
         resetZoomButton,
@@ -1818,13 +2682,6 @@ QWidget* MainWindow::createExpressionPCAPage()
         }
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToExpressionResults
-    );
-
     return page;
 }
 
@@ -1833,23 +2690,46 @@ QWidget* MainWindow::createPhylogeneticQualityPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 20, 30, 20);
+    layout->setContentsMargins(28, 16, 28, 18);
     layout->setSpacing(10);
 
-    QLabel* title = createPageTitle(
-        "FASTA Data-Quality Dashboard"
-    );
+    QFrame* qualityCard = new QFrame;
+    qualityCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "BioFlow Studio checks sequence counts, identifiers, lengths, "
-        "characters, GC content and compatibility with distance methods."
+    QVBoxLayout* cardLayout = new QVBoxLayout(qualityCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("FASTA quality report");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
+        "Automatic checks for sequence counts, identifiers, lengths, characters, GC content and distance-method compatibility."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     phylogeneticQualitySummaryLabel = new QLabel(
         "Import FASTA data to generate a quality report."
     );
     phylogeneticQualitySummaryLabel->setAlignment(Qt::AlignCenter);
     phylogeneticQualitySummaryLabel->setWordWrap(true);
+    phylogeneticQualitySummaryLabel->setObjectName("resultStatusBadge");
+
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(
+        phylogeneticQualitySummaryLabel,
+        0,
+        Qt::AlignTop
+    );
 
     phylogeneticQualityTable = new QTableWidget;
     phylogeneticQualityTable->setColumnCount(4);
@@ -1862,29 +2742,49 @@ QWidget* MainWindow::createPhylogeneticQualityPage()
     phylogeneticQualityTable->setSelectionBehavior(
         QAbstractItemView::SelectRows
     );
+    phylogeneticQualityTable->setSelectionMode(
+        QAbstractItemView::SingleSelection
+    );
+    phylogeneticQualityTable->setAlternatingRowColors(true);
     phylogeneticQualityTable->setWordWrap(true);
     phylogeneticQualityTable->verticalHeader()->setVisible(false);
     phylogeneticQualityTable->horizontalHeader()->setSectionResizeMode(
+        0,
+        QHeaderView::ResizeToContents
+    );
+    phylogeneticQualityTable->horizontalHeader()->setSectionResizeMode(
+        1,
+        QHeaderView::ResizeToContents
+    );
+    phylogeneticQualityTable->horizontalHeader()->setSectionResizeMode(
+        2,
         QHeaderView::Stretch
     );
-
-    QPushButton* backButton = new QPushButton(
-        "Back to Phylogenetic Setup"
+    phylogeneticQualityTable->horizontalHeader()->setSectionResizeMode(
+        3,
+        QHeaderView::Stretch
     );
-    backButton->setMinimumHeight(44);
-
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(phylogeneticQualitySummaryLabel);
-    layout->addWidget(phylogeneticQualityTable, 1);
-    layout->addWidget(backButton);
-
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToPhylogeneticSetup
+    phylogeneticQualityTable->setStyleSheet(
+        "QHeaderView { background-color: #0F172A; }"
+        "QHeaderView::section {"
+        " background-color: #0F172A; color: #9FB2CE;"
+        " border: 1px solid #334155; padding: 8px; font-weight: 600;"
+        "}"
+        "QTableCornerButton::section {"
+        " background-color: #0F172A; border: 1px solid #334155;"
+        "}"
     );
+
+    QLabel* tableHint = new QLabel(
+        "PASS meets the requirement  •  WARNING needs review  •  FAIL should be corrected before analysis"
+    );
+    tableHint->setObjectName("panelHint");
+
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(tableHint);
+    cardLayout->addWidget(phylogeneticQualityTable, 1);
+
+    layout->addWidget(qualityCard, 1);
 
     return page;
 }
@@ -1894,58 +2794,75 @@ QWidget* MainWindow::createExpressionQualityPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 20, 30, 20);
-    layout->setSpacing(10);
+    layout->setContentsMargins(28, 16, 28, 18);
 
-    QLabel* title = createPageTitle(
-        "Expression Data-Quality Dashboard"
-    );
+    QFrame* qualityCard = new QFrame;
+    qualityCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "BioFlow Studio checks matrix completeness, identifiers, zeros, "
-        "constant genes, sample totals and biological replicate readiness."
+    QVBoxLayout* cardLayout = new QVBoxLayout(qualityCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Expression quality report");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
+        "Automatic checks for completeness, identifiers, zero values, constant genes, sample totals and replicate readiness."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     expressionQualitySummaryLabel = new QLabel(
         "Import expression data to generate a quality report."
     );
     expressionQualitySummaryLabel->setAlignment(Qt::AlignCenter);
     expressionQualitySummaryLabel->setWordWrap(true);
+    expressionQualitySummaryLabel->setObjectName("resultStatusBadge");
+
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(
+        expressionQualitySummaryLabel,
+        0,
+        Qt::AlignTop
+    );
 
     expressionQualityTable = new QTableWidget;
     expressionQualityTable->setColumnCount(4);
     expressionQualityTable->setHorizontalHeaderLabels(
         {"Quality Check", "Status", "Observation", "Recommendation"}
     );
-    expressionQualityTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
-    );
-    expressionQualityTable->setSelectionBehavior(
-        QAbstractItemView::SelectRows
-    );
+    styleDashboardTable(expressionQualityTable);
     expressionQualityTable->setWordWrap(true);
-    expressionQualityTable->verticalHeader()->setVisible(false);
     expressionQualityTable->horizontalHeader()->setSectionResizeMode(
-        QHeaderView::Stretch
+        0, QHeaderView::ResizeToContents
+    );
+    expressionQualityTable->horizontalHeader()->setSectionResizeMode(
+        1, QHeaderView::ResizeToContents
+    );
+    expressionQualityTable->horizontalHeader()->setSectionResizeMode(
+        2, QHeaderView::Stretch
+    );
+    expressionQualityTable->horizontalHeader()->setSectionResizeMode(
+        3, QHeaderView::Stretch
     );
 
-    QPushButton* backButton = new QPushButton(
-        "Back to Expression Dataset"
+    QLabel* tableHint = new QLabel(
+        "PASS meets the requirement  •  WARNING needs review  •  FAIL should be corrected before analysis"
     );
-    backButton->setMinimumHeight(44);
+    tableHint->setObjectName("panelHint");
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(expressionQualitySummaryLabel);
-    layout->addWidget(expressionQualityTable, 1);
-    layout->addWidget(backButton);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(tableHint);
+    cardLayout->addWidget(expressionQualityTable, 1);
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToGeneExpressionSetup
-    );
+    layout->addWidget(qualityCard, 1);
 
     return page;
 }
@@ -1955,40 +2872,45 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(28, 18, 28, 18);
-    layout->setSpacing(8);
+    layout->setContentsMargins(28, 16, 28, 18);
+    layout->setSpacing(10);
 
-    QLabel* title = createPageTitle(
-        "Functional Enrichment and Pathway Analysis"
-    );
+    QFrame* filterCard = new QFrame;
+    filterCard->setObjectName("analysisCard");
 
-    QLabel* description = createDescription(
-        "Significant genes are tested for overrepresentation in the "
-        "BioFlow curated teaching pathway database using a hypergeometric "
-        "test and Benjamini-Hochberg correction."
+    QVBoxLayout* filterCardLayout = new QVBoxLayout(filterCard);
+    filterCardLayout->setContentsMargins(18, 12, 18, 12);
+    filterCardLayout->setSpacing(7);
+
+    QLabel* filterTitle = new QLabel("Pathway filters");
+    filterTitle->setObjectName("panelTitle");
+
+    QLabel* filterDescription = new QLabel(
+        "Search and prioritize overrepresented biological functions using adjusted significance thresholds."
     );
+    filterDescription->setObjectName("panelDescription");
 
     enrichmentSummaryLabel = new QLabel(
         "Run differential-expression analysis to identify enriched pathways."
     );
-    enrichmentSummaryLabel->setAlignment(Qt::AlignCenter);
-    enrichmentSummaryLabel->setWordWrap(true);
-    enrichmentSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
+    enrichmentSummaryLabel->setAlignment(
+        Qt::AlignLeft | Qt::AlignVCenter
     );
+    enrichmentSummaryLabel->setWordWrap(true);
+    enrichmentSummaryLabel->setObjectName("resultStatusBadge");
 
-    QGridLayout* filterLayout = new QGridLayout;
-    filterLayout->setHorizontalSpacing(10);
+    QHBoxLayout* filterLayout = new QHBoxLayout;
+    filterLayout->setSpacing(10);
 
     QLabel* searchLabel = new QLabel("Search pathway:");
-    searchLabel->setStyleSheet("font-weight: bold;");
+    searchLabel->setObjectName("fieldLabel");
 
     pathwaySearchBox = new QLineEdit;
     pathwaySearchBox->setPlaceholderText("Example: cell cycle");
     pathwaySearchBox->setClearButtonEnabled(true);
 
     QLabel* categoryLabel = new QLabel("Category:");
-    categoryLabel->setStyleSheet("font-weight: bold;");
+    categoryLabel->setObjectName("fieldLabel");
 
     pathwayCategoryBox = new QComboBox;
     pathwayCategoryBox->addItems(
@@ -2002,7 +2924,7 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
     );
 
     QLabel* thresholdLabel = new QLabel("Adjusted p-value <=");
-    thresholdLabel->setStyleSheet("font-weight: bold;");
+    thresholdLabel->setObjectName("fieldLabel");
 
     enrichmentPThresholdBox = new QDoubleSpinBox;
     enrichmentPThresholdBox->setRange(0.000001, 1.0);
@@ -2011,7 +2933,7 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
     enrichmentPThresholdBox->setValue(1.0);
 
     QLabel* maximumLabel = new QLabel("Display:");
-    maximumLabel->setStyleSheet("font-weight: bold;");
+    maximumLabel->setObjectName("fieldLabel");
 
     maximumPathwaysBox = new QComboBox;
     maximumPathwaysBox->addItem("All pathways", 0);
@@ -2020,17 +2942,59 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
     maximumPathwaysBox->addItem("Top 20", 20);
 
     QPushButton* resetButton = new QPushButton("Reset Filters");
-    resetButton->setMinimumHeight(34);
+    resetButton->setObjectName("compactActionButton");
 
-    filterLayout->addWidget(searchLabel, 0, 0);
-    filterLayout->addWidget(pathwaySearchBox, 0, 1);
-    filterLayout->addWidget(categoryLabel, 0, 2);
-    filterLayout->addWidget(pathwayCategoryBox, 0, 3);
-    filterLayout->addWidget(thresholdLabel, 1, 0);
-    filterLayout->addWidget(enrichmentPThresholdBox, 1, 1);
-    filterLayout->addWidget(maximumLabel, 1, 2);
-    filterLayout->addWidget(maximumPathwaysBox, 1, 3);
-    filterLayout->addWidget(resetButton, 0, 4, 2, 1);
+    QVBoxLayout* pathwayField = new QVBoxLayout;
+    pathwayField->setSpacing(4);
+    pathwayField->addWidget(searchLabel);
+    pathwayField->addWidget(pathwaySearchBox);
+
+    QVBoxLayout* categoryField = new QVBoxLayout;
+    categoryField->setSpacing(4);
+    categoryField->addWidget(categoryLabel);
+    categoryField->addWidget(pathwayCategoryBox);
+
+    QVBoxLayout* thresholdField = new QVBoxLayout;
+    thresholdField->setSpacing(4);
+    thresholdField->addWidget(thresholdLabel);
+    thresholdField->addWidget(enrichmentPThresholdBox);
+
+    QVBoxLayout* pathwayDisplayField = new QVBoxLayout;
+    pathwayDisplayField->setSpacing(4);
+    pathwayDisplayField->addWidget(maximumLabel);
+    pathwayDisplayField->addWidget(maximumPathwaysBox);
+
+    filterLayout->addLayout(pathwayField, 2);
+    filterLayout->addLayout(categoryField, 1);
+    filterLayout->addLayout(thresholdField, 1);
+    filterLayout->addLayout(pathwayDisplayField, 1);
+    filterLayout->addWidget(resetButton, 0, Qt::AlignBottom);
+
+    filterCardLayout->addWidget(filterTitle);
+    filterCardLayout->addWidget(filterDescription);
+    filterCardLayout->addLayout(filterLayout);
+
+    QFrame* resultCard = new QFrame;
+    resultCard->setObjectName("analysisCard");
+
+    QVBoxLayout* resultCardLayout = new QVBoxLayout(resultCard);
+    resultCardLayout->setContentsMargins(18, 12, 18, 14);
+    resultCardLayout->setSpacing(7);
+
+    QHBoxLayout* resultHeader = new QHBoxLayout;
+    QVBoxLayout* resultTitleLayout = new QVBoxLayout;
+    resultTitleLayout->setSpacing(2);
+
+    QLabel* resultTitle = new QLabel("Enriched pathways");
+    resultTitle->setObjectName("panelTitle");
+
+    QLabel* resultDescription = new QLabel(
+        "Hypergeometric overrepresentation with Benjamini-Hochberg multiple-testing correction."
+    );
+    resultDescription->setObjectName("panelDescription");
+
+    resultTitleLayout->addWidget(resultTitle);
+    resultTitleLayout->addWidget(resultDescription);
 
     enrichmentResultsTable = new QTableWidget;
     enrichmentResultsTable->setColumnCount(8);
@@ -2046,48 +3010,44 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
             "Contributing Genes"
         }
     );
-    enrichmentResultsTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers
-    );
-    enrichmentResultsTable->setSelectionBehavior(
-        QAbstractItemView::SelectRows
-    );
-    enrichmentResultsTable->setAlternatingRowColors(true);
-    enrichmentResultsTable->verticalHeader()->setVisible(false);
+    styleDashboardTable(enrichmentResultsTable);
     enrichmentResultsTable->horizontalHeader()->setSectionResizeMode(
         QHeaderView::ResizeToContents
     );
     enrichmentResultsTable->horizontalHeader()->setStretchLastSection(true);
 
     enrichmentBarChart = new EnrichmentBarChartWidget;
+    enrichmentBarChart->setMinimumWidth(300);
+    enrichmentBarChart->setMaximumWidth(360);
 
     QPushButton* exportButton = new QPushButton(
-        "Export Enrichment Results"
+        "Export results"
     );
-    exportButton->setMinimumHeight(42);
 
     QPushButton* exportChartButton = new QPushButton(
-        "Export Pathway Chart PNG"
+        "Export chart PNG"
     );
-    exportChartButton->setMinimumHeight(42);
 
-    QPushButton* backButton = new QPushButton(
-        "Back to Differential Expression Results"
-    );
-    backButton->setMinimumHeight(42);
+    exportButton->setProperty("primary", true);
+    exportChartButton->setObjectName("compactActionButton");
+    exportButton->setCursor(Qt::PointingHandCursor);
+    exportChartButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout;
-    buttonLayout->addWidget(exportButton);
-    buttonLayout->addWidget(exportChartButton);
-    buttonLayout->addWidget(backButton);
+    resultHeader->addLayout(resultTitleLayout, 1);
+    resultHeader->addWidget(exportButton, 0, Qt::AlignTop);
+    resultHeader->addWidget(exportChartButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(enrichmentSummaryLabel);
-    layout->addLayout(filterLayout);
-    layout->addWidget(enrichmentResultsTable, 3);
-    layout->addWidget(enrichmentBarChart, 2);
-    layout->addLayout(buttonLayout);
+    QHBoxLayout* resultContentLayout = new QHBoxLayout;
+    resultContentLayout->setSpacing(10);
+    resultContentLayout->addWidget(enrichmentResultsTable, 1);
+    resultContentLayout->addWidget(enrichmentBarChart);
+
+    resultCardLayout->addLayout(resultHeader);
+    resultCardLayout->addWidget(enrichmentSummaryLabel);
+    resultCardLayout->addLayout(resultContentLayout, 1);
+
+    layout->addWidget(filterCard);
+    layout->addWidget(resultCard, 1);
 
     connect(
         pathwaySearchBox,
@@ -2145,13 +3105,6 @@ QWidget* MainWindow::createExpressionEnrichmentPage()
         }
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToExpressionResults
-    );
-
     return page;
 }
 
@@ -2160,21 +3113,30 @@ QWidget* MainWindow::createWorkflowBuilderPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(22, 16, 22, 16);
-    layout->setSpacing(8);
+    layout->setContentsMargins(28, 16, 28, 18);
+    layout->setSpacing(10);
 
-    QLabel* title = createPageTitle("Graphical Bioinformatics Workflow Builder");
-    QLabel* description = createDescription(
-        "Load a biological workflow template, drag nodes to rearrange it, "
-        "add custom steps, connect dependencies and validate the workflow."
+    QFrame* controlCard = new QFrame;
+    controlCard->setObjectName("analysisCard");
+
+    QVBoxLayout* controlLayout = new QVBoxLayout(controlCard);
+    controlLayout->setContentsMargins(18, 12, 18, 12);
+    controlLayout->setSpacing(7);
+
+    QLabel* controlTitle = new QLabel("Workflow controls");
+    controlTitle->setObjectName("panelTitle");
+
+    QLabel* controlDescription = new QLabel(
+        "Load a template, add or connect steps, validate dependencies and export the resulting workflow."
     );
+    controlDescription->setObjectName("panelDescription");
 
     workflowTemplateBox = new QComboBox;
     workflowTemplateBox->addItem("Gene Expression Workflow");
     workflowTemplateBox->addItem("Phylogenetic Workflow");
 
     QPushButton* loadTemplateButton = new QPushButton("Load Template");
-    loadTemplateButton->setMinimumHeight(36);
+    loadTemplateButton->setProperty("primary", true);
 
     workflowNodeTypeBox = new QComboBox;
     workflowNodeTypeBox->addItems(
@@ -2191,15 +3153,23 @@ QWidget* MainWindow::createWorkflowBuilderPage()
          {addNodeButton, connectButton, removeButton, validateButton,
           exportWorkflowButton})
     {
-        button->setMinimumHeight(36);
+        button->setObjectName("compactActionButton");
+        button->setCursor(Qt::PointingHandCursor);
     }
 
+    loadTemplateButton->setCursor(Qt::PointingHandCursor);
+
     QHBoxLayout* templateLayout = new QHBoxLayout;
-    templateLayout->addWidget(new QLabel("Template:"));
+    QLabel* templateLabel = new QLabel("Template");
+    templateLabel->setObjectName("fieldLabel");
+    QLabel* nodeTypeLabel = new QLabel("New step type");
+    nodeTypeLabel->setObjectName("fieldLabel");
+
+    templateLayout->addWidget(templateLabel);
     templateLayout->addWidget(workflowTemplateBox, 1);
     templateLayout->addWidget(loadTemplateButton);
     templateLayout->addSpacing(15);
-    templateLayout->addWidget(new QLabel("New step type:"));
+    templateLayout->addWidget(nodeTypeLabel);
     templateLayout->addWidget(workflowNodeTypeBox);
     templateLayout->addWidget(addNodeButton);
 
@@ -2210,46 +3180,93 @@ QWidget* MainWindow::createWorkflowBuilderPage()
     editLayout->addWidget(exportWorkflowButton);
     editLayout->addStretch();
 
+    controlLayout->addWidget(controlTitle);
+    controlLayout->addWidget(controlDescription);
+    controlLayout->addLayout(templateLayout);
+    controlLayout->addLayout(editLayout);
+
     workflowCanvas = new WorkflowCanvasWidget;
+
+    QFrame* canvasCard = new QFrame;
+    canvasCard->setObjectName("analysisCard");
+
+    QVBoxLayout* canvasLayout = new QVBoxLayout(canvasCard);
+    canvasLayout->setContentsMargins(14, 12, 14, 14);
+    canvasLayout->setSpacing(7);
+
+    QLabel* canvasTitle = new QLabel("Workflow canvas");
+    canvasTitle->setObjectName("panelTitle");
+
+    QLabel* canvasHint = new QLabel(
+        "Drag nodes to reposition them; select two nodes when creating a dependency."
+    );
+    canvasHint->setObjectName("panelHint");
+
+    workflowCanvas->setMinimumSize(1020, 360);
+
+    QScrollArea* workflowScrollArea = new QScrollArea;
+    workflowScrollArea->setWidget(workflowCanvas);
+    workflowScrollArea->setWidgetResizable(false);
+    workflowScrollArea->setFrameShape(QFrame::NoFrame);
+    workflowScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    workflowScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    workflowScrollArea->setStyleSheet(
+        "QScrollArea { background-color: #F8FAFC; border: none; }"
+        "QScrollArea > QWidget > QWidget { background-color: #F8FAFC; }"
+    );
+
+    canvasLayout->addWidget(canvasTitle);
+    canvasLayout->addWidget(canvasHint);
+    canvasLayout->addWidget(workflowScrollArea, 1);
+
+    QFrame* inspectorCard = new QFrame;
+    inspectorCard->setObjectName("analysisCard");
+    inspectorCard->setMinimumHeight(82);
+    inspectorCard->setMaximumHeight(105);
+
+    QHBoxLayout* inspectorLayout = new QHBoxLayout(inspectorCard);
+    inspectorLayout->setContentsMargins(16, 10, 16, 10);
+    inspectorLayout->setSpacing(12);
+
+    QLabel* inspectorTitle = new QLabel("Selected step");
+    inspectorTitle->setObjectName("panelTitle");
 
     workflowSelectionLabel = new QLabel(
         "Select a workflow node to inspect its biological purpose."
     );
     workflowSelectionLabel->setWordWrap(true);
-    workflowSelectionLabel->setStyleSheet(
-        "background-color: white; border: 1px solid #D7E0E8; "
-        "border-radius: 6px; padding: 8px; color: #40566B;"
-    );
+    workflowSelectionLabel->setObjectName("panelHint");
 
     workflowValidationLabel = new QLabel(
         "Load or edit a workflow, then validate its dependencies."
     );
     workflowValidationLabel->setWordWrap(true);
-    workflowValidationLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
-    );
+    workflowValidationLabel->setObjectName("resultStatusBadge");
+    workflowValidationLabel->setMaximumWidth(320);
 
     openSelectedWorkflowStepButton = new QPushButton(
-        "Open Selected Analysis Step"
+        "Open selected analysis  →"
     );
-    openSelectedWorkflowStepButton->setMinimumHeight(42);
+    openSelectedWorkflowStepButton->setProperty("primary", true);
+    openSelectedWorkflowStepButton->setCursor(Qt::PointingHandCursor);
     openSelectedWorkflowStepButton->setEnabled(false);
 
-    QPushButton* backButton = new QPushButton("Back to Dashboard");
-    backButton->setMinimumHeight(42);
+    QVBoxLayout* selectionLayout = new QVBoxLayout;
+    selectionLayout->setSpacing(3);
+    selectionLayout->addWidget(inspectorTitle);
+    selectionLayout->addWidget(workflowSelectionLabel);
 
-    QHBoxLayout* bottomLayout = new QHBoxLayout;
-    bottomLayout->addWidget(openSelectedWorkflowStepButton);
-    bottomLayout->addWidget(backButton);
+    inspectorLayout->addLayout(selectionLayout, 1);
+    inspectorLayout->addWidget(workflowValidationLabel);
+    inspectorLayout->addWidget(openSelectedWorkflowStepButton);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addLayout(templateLayout);
-    layout->addLayout(editLayout);
-    layout->addWidget(workflowCanvas, 1);
-    layout->addWidget(workflowSelectionLabel);
-    layout->addWidget(workflowValidationLabel);
-    layout->addLayout(bottomLayout);
+    QVBoxLayout* workspaceLayout = new QVBoxLayout;
+    workspaceLayout->setSpacing(10);
+    workspaceLayout->addWidget(canvasCard, 1);
+    workspaceLayout->addWidget(inspectorCard);
+
+    layout->addWidget(controlCard);
+    layout->addLayout(workspaceLayout, 1);
 
     workflowCanvas->setSelectionChangedCallback(
         [this](const WorkflowNode* node)
@@ -2281,7 +3298,7 @@ QWidget* MainWindow::createWorkflowBuilderPage()
                 "Workflow modified — validate before using it."
             );
             workflowValidationLabel->setStyleSheet(
-                "font-weight: bold; color: #B26A00;"
+                "font-weight: 700; color: #FBBF24;"
             );
         }
     );
@@ -2291,7 +3308,7 @@ QWidget* MainWindow::createWorkflowBuilderPage()
         {
             workflowValidationLabel->setText(message);
             workflowValidationLabel->setStyleSheet(
-                "font-weight: bold; color: #245C8A;"
+                "font-weight: 700; color: #93C5FD;"
             );
         }
     );
@@ -2358,8 +3375,8 @@ QWidget* MainWindow::createWorkflowBuilderPage()
             );
             workflowValidationLabel->setStyleSheet(
                 valid
-                    ? "font-weight: bold; color: #2D6A4F;"
-                    : "font-weight: bold; color: #B02A37;"
+                    ? "font-weight: 700; color: #6EE7B7;"
+                    : "font-weight: 700; color: #FCA5A5;"
             );
         }
     );
@@ -2385,13 +3402,6 @@ QWidget* MainWindow::createWorkflowBuilderPage()
         &MainWindow::openSelectedWorkflowStep
     );
 
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToDashboard
-    );
-
     loadWorkflowTemplate();
     return page;
 }
@@ -2401,49 +3411,68 @@ QWidget* MainWindow::createProjectHistoryPage()
     QWidget* page = new QWidget;
     QVBoxLayout* layout = new QVBoxLayout(page);
 
-    layout->setContentsMargins(30, 22, 30, 22);
-    layout->setSpacing(10);
+    layout->setContentsMargins(28, 16, 28, 18);
 
-    QLabel* title = createPageTitle("Project Analysis History");
-    QLabel* description = createDescription(
-        "A chronological record of imported datasets and completed "
-        "bioinformatics analyses in the current project."
+    QFrame* historyCard = new QFrame;
+    historyCard->setObjectName("analysisCard");
+
+    QVBoxLayout* cardLayout = new QVBoxLayout(historyCard);
+    cardLayout->setContentsMargins(18, 14, 18, 16);
+    cardLayout->setSpacing(9);
+
+    QHBoxLayout* headerLayout = new QHBoxLayout;
+    QVBoxLayout* titleLayout = new QVBoxLayout;
+    titleLayout->setSpacing(2);
+
+    QLabel* title = new QLabel("Analysis activity");
+    title->setObjectName("panelTitle");
+
+    QLabel* description = new QLabel(
+        "Chronological record of imported datasets, configuration changes and completed analyses in this project."
     );
+    description->setObjectName("panelDescription");
+    description->setWordWrap(true);
+
+    titleLayout->addWidget(title);
+    titleLayout->addWidget(description);
 
     projectHistorySummaryLabel = new QLabel("No history entries yet.");
     projectHistorySummaryLabel->setAlignment(Qt::AlignCenter);
-    projectHistorySummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #40566B;"
-    );
+    projectHistorySummaryLabel->setObjectName("resultStatusBadge");
 
     projectHistoryTable = new QTableWidget;
     projectHistoryTable->setColumnCount(5);
     projectHistoryTable->setHorizontalHeaderLabels(
         {"Date and Time", "Workspace", "Action", "Status", "Details"}
     );
-    projectHistoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    projectHistoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    projectHistoryTable->setAlternatingRowColors(true);
-    projectHistoryTable->verticalHeader()->setVisible(false);
+    styleDashboardTable(projectHistoryTable);
     projectHistoryTable->horizontalHeader()->setSectionResizeMode(
-        QHeaderView::ResizeToContents
+        0, QHeaderView::ResizeToContents
     );
-    projectHistoryTable->horizontalHeader()->setStretchLastSection(true);
+    projectHistoryTable->horizontalHeader()->setSectionResizeMode(
+        1, QHeaderView::ResizeToContents
+    );
+    projectHistoryTable->horizontalHeader()->setSectionResizeMode(
+        2, QHeaderView::ResizeToContents
+    );
+    projectHistoryTable->horizontalHeader()->setSectionResizeMode(
+        3, QHeaderView::ResizeToContents
+    );
+    projectHistoryTable->horizontalHeader()->setSectionResizeMode(
+        4, QHeaderView::Stretch
+    );
 
-    QPushButton* saveButton = new QPushButton("Save Current Project");
-    QPushButton* backButton = new QPushButton("Back to Dashboard");
-    saveButton->setMinimumHeight(44);
-    backButton->setMinimumHeight(44);
+    QPushButton* saveButton = new QPushButton("Save project");
+    saveButton->setProperty("primary", true);
+    saveButton->setCursor(Qt::PointingHandCursor);
 
-    QHBoxLayout* buttonLayout = new QHBoxLayout;
-    buttonLayout->addWidget(saveButton);
-    buttonLayout->addWidget(backButton);
+    headerLayout->addLayout(titleLayout, 1);
+    headerLayout->addWidget(projectHistorySummaryLabel, 0, Qt::AlignTop);
+    headerLayout->addWidget(saveButton, 0, Qt::AlignTop);
 
-    layout->addWidget(title);
-    layout->addWidget(description);
-    layout->addWidget(projectHistorySummaryLabel);
-    layout->addWidget(projectHistoryTable, 1);
-    layout->addLayout(buttonLayout);
+    cardLayout->addLayout(headerLayout);
+    cardLayout->addWidget(projectHistoryTable, 1);
+    layout->addWidget(historyCard, 1);
 
     connect(
         saveButton,
@@ -2451,13 +3480,6 @@ QWidget* MainWindow::createProjectHistoryPage()
         this,
         &MainWindow::saveProject
     );
-    connect(
-        backButton,
-        &QPushButton::clicked,
-        this,
-        &MainWindow::returnToDashboard
-    );
-
     return page;
 }
 
@@ -2522,7 +3544,7 @@ void MainWindow::loadWorkflowTemplate()
         "Template loaded. Drag nodes to rearrange them or validate the workflow."
     );
     workflowValidationLabel->setStyleSheet(
-        "font-weight: bold; color: #2D6A4F;"
+        "font-weight: 700; color: #6EE7B7;"
     );
 }
 
@@ -2731,6 +3753,21 @@ void MainWindow::openDistanceMatrixPage()
     );
 }
 
+void MainWindow::openPhylogeneticHeatmapPage()
+{
+    if (currentDistanceMatrix.size() == 0)
+    {
+        QMessageBox::information(
+            this,
+            "Generate Matrix First",
+            "Generate the distance matrix before opening its heatmap."
+        );
+        return;
+    }
+
+    pages->setCurrentIndex(PhylogeneticHeatmapPage);
+}
+
 void MainWindow::openPhylogeneticTreePage()
 {
     pages->setCurrentIndex(
@@ -2802,6 +3839,8 @@ void MainWindow::openExpressionHeatmapPage()
             maximumDisplayedGenes
         );
 
+        fitEmbeddedHeatmapTable(expressionHeatmapWidget);
+
         std::size_t displayedGenes = std::min(
             maximumDisplayedGenes,
             filteredExpressionResults.size()
@@ -2821,7 +3860,7 @@ void MainWindow::openExpressionHeatmapPage()
             ))
         );
         expressionHeatmapSummaryLabel->setStyleSheet(
-            "font-weight: bold; color: #2D6A4F;"
+            "font-weight: 700; color: #6EE7B7;"
         );
 
         pages->setCurrentIndex(ExpressionHeatmapPage);
@@ -2877,7 +3916,7 @@ void MainWindow::openExpressionPCAPage()
             )
         );
         pcaSummaryLabel->setStyleSheet(
-            "font-weight: bold; color: #2D6A4F;"
+            "font-weight: 700; color: #6EE7B7;"
         );
 
         pages->setCurrentIndex(ExpressionPCAPage);
@@ -3219,8 +4258,8 @@ void MainWindow::populateEnrichmentResultsTable()
 
     enrichmentSummaryLabel->setStyleSheet(
         filteredEnrichmentResults.empty()
-            ? "font-weight: bold; color: #B26A00;"
-            : "font-weight: bold; color: #2D6A4F;"
+            ? "font-weight: 700; color: #FBBF24;"
+            : "font-weight: 700; color: #6EE7B7;"
     );
 }
 
@@ -3285,8 +4324,11 @@ void MainWindow::loadFastaFiles(
     phylogeneticFileList->clear();
 
     distanceMatrixTable->clear();
+    distanceHeatmapTable->clear();
     distanceMatrixTable->setRowCount(0);
     distanceMatrixTable->setColumnCount(0);
+    distanceHeatmapTable->setRowCount(0);
+    distanceHeatmapTable->setColumnCount(0);
 
     treeGraphic->clearTree();
     treeOutput->clear();
@@ -3451,16 +4493,12 @@ void MainWindow::generateDistanceMatrix()
         );
 
         matrixStatusLabel->setText(
-            QString(
-                "%1 | Green = similar, Red = distant"
-            ).arg(
-                matrixAlignmentMethodBox->currentText()
-            )
+            matrixAlignmentMethodBox->currentText()
         );
 
         matrixStatusLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #2D6A4F;"
+            "color: #6EE7B7;"
         );
 
         recordHistory(
@@ -3482,7 +4520,7 @@ void MainWindow::generateDistanceMatrix()
 
         matrixStatusLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #B02A37;"
+            "color: #FCA5A5;"
         );
 
         QMessageBox::critical(
@@ -3525,6 +4563,14 @@ void MainWindow::populateDistanceMatrixTable(
         static_cast<int>(matrixSize)
     );
 
+    distanceHeatmapTable->setRowCount(
+        static_cast<int>(matrixSize)
+    );
+
+    distanceHeatmapTable->setColumnCount(
+        static_cast<int>(matrixSize)
+    );
+
     QStringList labels;
 
     for (const std::string& label :
@@ -3535,11 +4581,35 @@ void MainWindow::populateDistanceMatrixTable(
         );
     }
 
+    QStringList columnLabels;
+
+    for (int index = 0; index < labels.size(); ++index)
+    {
+        columnLabels.append(QString("S%1").arg(index + 1));
+    }
+
     distanceMatrixTable
-        ->setHorizontalHeaderLabels(labels);
+        ->setHorizontalHeaderLabels(columnLabels);
 
     distanceMatrixTable
         ->setVerticalHeaderLabels(labels);
+
+    distanceHeatmapTable
+        ->setHorizontalHeaderLabels(columnLabels);
+
+    distanceHeatmapTable
+        ->setVerticalHeaderLabels(labels);
+
+    for (int index = 0; index < labels.size(); ++index)
+    {
+        distanceMatrixTable->horizontalHeaderItem(index)->setToolTip(
+            QString("S%1: %2").arg(index + 1).arg(labels.at(index))
+        );
+
+        distanceHeatmapTable->horizontalHeaderItem(index)->setToolTip(
+            QString("S%1: %2").arg(index + 1).arg(labels.at(index))
+        );
+    }
 
     for (std::size_t row = 0;
          row < matrixSize;
@@ -3628,19 +4698,47 @@ void MainWindow::populateDistanceMatrixTable(
                 static_cast<int>(column),
                 item
             );
+
+            QTableWidgetItem* heatmapItem =
+                new QTableWidgetItem(
+                    QString::number(distance, 'f', 4)
+                );
+
+            heatmapItem->setBackground(cellColor);
+            heatmapItem->setForeground(QColor("#152536"));
+            heatmapItem->setTextAlignment(Qt::AlignCenter);
+            heatmapItem->setToolTip(item->toolTip());
+
+            distanceHeatmapTable->setItem(
+                static_cast<int>(row),
+                static_cast<int>(column),
+                heatmapItem
+            );
         }
     }
 
     distanceMatrixTable
         ->horizontalHeader()
         ->setSectionResizeMode(
-            QHeaderView::ResizeToContents
+            QHeaderView::Stretch
         );
 
     distanceMatrixTable
         ->verticalHeader()
         ->setSectionResizeMode(
-            QHeaderView::ResizeToContents
+            QHeaderView::Fixed
+        );
+
+    distanceHeatmapTable
+        ->horizontalHeader()
+        ->setSectionResizeMode(
+            QHeaderView::Stretch
+        );
+
+    distanceHeatmapTable
+        ->verticalHeader()
+        ->setSectionResizeMode(
+            QHeaderView::Fixed
         );
 }
 
@@ -3698,7 +4796,7 @@ void MainWindow::generatePhylogeneticTree()
 
         treeStatusLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #2D6A4F;"
+            "color: #6EE7B7;"
         );
 
         recordHistory(
@@ -3724,7 +4822,7 @@ void MainWindow::generatePhylogeneticTree()
 
         treeStatusLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #B02A37;"
+            "color: #FCA5A5;"
         );
 
         QMessageBox::critical(
@@ -4085,7 +5183,7 @@ void MainWindow::loadExpressionFile(
 
         expressionSummaryLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #2D6A4F;"
+            "color: #6EE7B7;"
         );
 
         if (shouldRecordHistory)
@@ -4127,7 +5225,7 @@ void MainWindow::loadExpressionFile(
 
         expressionSummaryLabel->setStyleSheet(
             "font-weight: bold;"
-            "color: #B02A37;"
+            "color: #FCA5A5;"
         );
 
         QMessageBox::critical(
@@ -4229,8 +5327,8 @@ void MainWindow::showAboutDialog()
     QMessageBox::about(
         this,
         "About BioFlow Studio",
-        "<h2 style='color:#163A5F;'>BioFlow Studio 1.0</h2>"
-        "<p><b>Object-Oriented Bioinformatics Workflow Platform</b></p>"
+        "<h2 style='color:#F8FAFC;'>BioFlow Studio 1.0</h2>"
+        "<p><b>Integrated biological analysis and workflow platform</b></p>"
         "<p>BioFlow Studio combines phylogenetic analysis, gene-expression "
         "analysis, quality control, pathway enrichment, interactive "
         "visualization and reproducible project workflows.</p>"
@@ -4239,7 +5337,7 @@ void MainWindow::showAboutDialog()
         "encapsulation and strategy-based algorithms</p>"
         "<p><b>Project leader and integrator:</b> Muhammad Abdul Wahid<br>"
         "Developed as a four-member undergraduate bioinformatics project.</p>"
-        "<p style='color:#40566B;'>Educational software &mdash; analytical "
+        "<p style='color:#94A3B8;'>Educational software &mdash; analytical "
         "results should be validated before research or clinical use.</p>"
     );
 }
@@ -4647,19 +5745,19 @@ void MainWindow::populateQualityReportTable(
     if (report.getOverallStatus() == QualityStatus::Pass)
     {
         summaryLabel->setStyleSheet(
-            "font-weight: bold; color: #176B35;"
+            "font-weight: 700; color: #6EE7B7;"
         );
     }
     else if (report.getOverallStatus() == QualityStatus::Warning)
     {
         summaryLabel->setStyleSheet(
-            "font-weight: bold; color: #8A5A00;"
+            "font-weight: 700; color: #FBBF24;"
         );
     }
     else
     {
         summaryLabel->setStyleSheet(
-            "font-weight: bold; color: #9C1C1C;"
+            "font-weight: 700; color: #FCA5A5;"
         );
     }
 }
@@ -4757,8 +5855,8 @@ void MainWindow::populateSampleGroupingTable()
                 bool valid = controlCount >= 2 && treatmentCount >= 2;
                 groupingStatusLabel->setStyleSheet(
                     valid
-                        ? "font-weight: bold; color: #2D6A4F;"
-                        : "font-weight: bold; color: #B26A00;"
+                        ? "font-weight: 700; color: #6EE7B7;"
+                        : "font-weight: 700; color: #FBBF24;"
                 );
             }
         );
@@ -4781,8 +5879,8 @@ void MainWindow::populateSampleGroupingTable()
 
     groupingStatusLabel->setStyleSheet(
         controlCount >= 2 && treatmentCount >= 2
-            ? "font-weight: bold; color: #2D6A4F;"
-            : "font-weight: bold; color: #B26A00;"
+            ? "font-weight: 700; color: #6EE7B7;"
+            : "font-weight: 700; color: #FBBF24;"
     );
 }
 
@@ -4953,8 +6051,8 @@ void MainWindow::applyExpressionFilters()
 
     expressionFilterSummaryLabel->setStyleSheet(
         filteredExpressionResults.empty()
-            ? "font-weight: bold; color: #B26A00;"
-            : "font-weight: bold; color: #2D6A4F;"
+            ? "font-weight: 700; color: #FBBF24;"
+            : "font-weight: 700; color: #6EE7B7;"
     );
 }
 
@@ -5067,7 +6165,7 @@ void MainWindow::populateExpressionResultsTable()
         .arg(normalizationMethodBox->currentText())
     );
     expressionResultsSummaryLabel->setStyleSheet(
-        "font-weight: bold; color: #2D6A4F;"
+        "font-weight: 700; color: #6EE7B7;"
     );
 
     expressionResultsTable->setSortingEnabled(true);
