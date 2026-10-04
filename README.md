@@ -105,3 +105,6 @@ Some files intentionally contain invalid inputs to exercise validation.
 
 BioFlow Studio is an educational bioinformatics application.
 Analysis results depend on the selected methods, settings, and input data.
+## Dashboard
+
+![BioFlow Studio dashboard](docs/images/dashboard.png)
