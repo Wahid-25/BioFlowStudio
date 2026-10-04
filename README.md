@@ -108,3 +108,8 @@ Analysis results depend on the selected methods, settings, and input data.
 ## Dashboard
 
 ![BioFlow Studio dashboard](docs/images/dashboard.png)
+BioFlowStudio-Demo
+
+
+https://github.com/user-attachments/assets/8a3d3c3c-abd3-4917-bd26-fb0c7f999e83
+
