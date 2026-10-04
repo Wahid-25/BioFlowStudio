@@ -108,8 +108,10 @@ Analysis results depend on the selected methods, settings, and input data.
 ## Dashboard
 
 ![BioFlow Studio dashboard](docs/images/dashboard.png)
-BioFlowStudio-Demo
+## Demo Video
 
+[![Watch the BioFlow Studio demo](https://img.youtube.com/vi/BlpjJit-VjU/hqdefault.jpg)](https://www.youtube.com/watch?v=BlpjJit-VjU)
 
-https://github.com/user-attachments/assets/8a3d3c3c-abd3-4917-bd26-fb0c7f999e83
+Click the thumbnail to watch the application demonstration.
+
 
